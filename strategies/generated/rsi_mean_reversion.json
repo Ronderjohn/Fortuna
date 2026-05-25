@@ -1,0 +1,67 @@
+{
+  "name": "rsi_mean_reversion",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "long",
+  "indicators": [
+    {
+      "id": "rsi",
+      "type": "rsi",
+      "params": { "window": 14 },
+      "source": "close"
+    },
+    {
+      "id": "sma_trend",
+      "type": "sma",
+      "params": { "window": 15 },
+      "source": "close"
+    }
+  ],
+  "rules": {
+    "entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "compare",
+            "left": "rsi",
+            "operator": "lt",
+            "right": 40
+          },
+          {
+            "type": "compare",
+            "left": "close",
+            "operator": "gt",
+            "right": "sma_trend"
+          }
+        ]
+      }
+    ],
+    "exit_conditions": [
+      {
+        "type": "compare",
+        "left": "rsi",
+        "operator": "gt",
+        "right": 60
+      }
+    ],
+    "filters": []
+  },
+  "risk": {
+    "stop_loss": { "type": "percent", "value": 0.015 },
+    "take_profit": { "type": "percent", "value": 0.025 },
+    "position_sizing": { "type": "fixed_fraction", "value": 0.90 }
+  },
+  "metadata": {
+    "author": "system",
+    "version": "2.0",
+    "tags": ["mean_reversion", "rsi", "intraday", "5m"],
+    "description": "RSI oversold in short-term uptrend (5m intraday).",
+    "parameter_count": 2
+  },
+  "param_grid": {
+    "indicators.rsi.params.window": [10, 14],
+    "indicators.sma_trend.params.window": [15, 20, 30]
+  }
+}

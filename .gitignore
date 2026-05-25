@@ -1,0 +1,74 @@
+# ─── Python ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ─── Virtual environments ────────────────────────────────────────────────
+.venv/
+venv/
+env/
+# uv: .venv is ignored above; uv.lock IS committed.
+.uv/
+
+# ─── Build / dist ────────────────────────────────────────────────────────
+*.egg-info/
+build/
+dist/
+
+# ─── Test / lint caches ──────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+
+# ─── Secrets ─────────────────────────────────────────────────────────────
+# SmartAPI credentials, TOTP secret — never commit.
+.env
+.env.local
+*.env.local
+# Streamlit secrets file (if ever used)
+.streamlit/secrets.toml
+
+# ─── Runtime data caches (regenerable) ───────────────────────────────────
+# OHLCV Parquet cache (downloaded from SmartAPI / yfinance / OpenChart)
+data/market_cache/
+# Angel One OpenAPIScripMaster + instrument master
+data/smartapi/
+# DuckDB analytical database + write-ahead log
+*.duckdb
+*.duckdb.wal
+data/raw/
+data/processed/
+data/features/
+
+# ─── Runtime artifacts ───────────────────────────────────────────────────
+# Backtest / arena / paper-league / institutional run outputs.
+# Keep logs/README.md tracked (gitkeep-style note).
+logs/*
+!logs/README.md
+!logs/.gitkeep
+
+# ─── Phase planning drafts (not part of the public repo) ─────────────────
+Phase_2.md
+
+# ─── Notebooks ───────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ─── IDE / editor ────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ─── OS ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Logs ─────────────────────────────────────────────────────────────────
+logs/*
+!logs/README.md
+!logs/.gitkeep 
+

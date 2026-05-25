@@ -1,0 +1,36 @@
+{
+  "name": "ema_pullback_5m",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "long",
+  "indicators": [
+    { "id": "ema_fast", "type": "ema", "params": { "window": 9 }, "source": "close" },
+    { "id": "ema_slow", "type": "ema", "params": { "window": 21 }, "source": "close" }
+  ],
+  "rules": {
+    "entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          { "type": "compare", "left": "ema_fast", "operator": "gt", "right": "ema_slow" },
+          { "type": "crossover", "left": "close", "right": "ema_fast" }
+        ]
+      }
+    ],
+    "exit_conditions": [
+      { "type": "crossunder", "left": "close", "right": "ema_fast" }
+    ],
+    "filters": []
+  },
+  "risk": {
+    "stop_loss": { "type": "percent", "value": 0.01 },
+    "take_profit": { "type": "percent", "value": 0.02 },
+    "position_sizing": { "type": "fixed_fraction", "value": 0.95 }
+  },
+  "metadata": {
+    "version": "1.0",
+    "tags": ["intraday", "ema", "pullback", "5m"],
+    "description": "EMA stack uptrend + pullback reclaim (9/21 popular combo)."
+  }
+}

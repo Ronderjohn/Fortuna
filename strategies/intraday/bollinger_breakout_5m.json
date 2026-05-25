@@ -1,0 +1,46 @@
+{
+  "name": "bollinger_breakout_5m",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "long",
+  "indicators": [
+    {
+      "id": "bb",
+      "type": "bollinger",
+      "params": { "window": 20, "window_dev": 2.0 },
+      "source": "close"
+    },
+    {
+      "id": "volume_sma",
+      "type": "volume_sma",
+      "params": { "window": 20 },
+      "source": "volume"
+    }
+  ],
+  "rules": {
+    "entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          { "type": "crossover", "left": "close", "right": "bb_upper" },
+          { "type": "compare", "left": "volume", "operator": "gt", "right": "volume_sma" }
+        ]
+      }
+    ],
+    "exit_conditions": [
+      { "type": "crossunder", "left": "close", "right": "bb_middle" }
+    ],
+    "filters": []
+  },
+  "risk": {
+    "stop_loss": { "type": "percent", "value": 0.01 },
+    "take_profit": { "type": "percent", "value": 0.02 },
+    "position_sizing": { "type": "fixed_fraction", "value": 0.90 }
+  },
+  "metadata": {
+    "version": "1.0",
+    "tags": ["intraday", "bollinger", "breakout", "5m"],
+    "description": "Bollinger upper-band breakout with volume (momentum expansion)."
+  }
+}

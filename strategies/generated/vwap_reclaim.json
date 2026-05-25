@@ -1,0 +1,61 @@
+{
+  "name": "vwap_reclaim",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "long",
+  "indicators": [
+    {
+      "id": "vwap",
+      "type": "vwap",
+      "params": {},
+      "source": "hlc3"
+    },
+    {
+      "id": "volume_sma",
+      "type": "volume_sma",
+      "params": { "window": 10 },
+      "source": "volume"
+    }
+  ],
+  "rules": {
+    "entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "crossover",
+            "left": "close",
+            "right": "vwap"
+          },
+          {
+            "type": "compare",
+            "left": "volume",
+            "operator": "gt",
+            "right": "volume_sma"
+          }
+        ]
+      }
+    ],
+    "exit_conditions": [
+      {
+        "type": "crossunder",
+        "left": "close",
+        "right": "vwap"
+      }
+    ],
+    "filters": []
+  },
+  "risk": {
+    "stop_loss": { "type": "percent", "value": 0.012 },
+    "take_profit": { "type": "percent", "value": 0.024 },
+    "position_sizing": { "type": "fixed_fraction", "value": 0.90 }
+  },
+  "metadata": {
+    "author": "system",
+    "version": "2.0",
+    "tags": ["intraday", "vwap", "5m"],
+    "description": "VWAP reclaim with volume confirmation on 5m bars.",
+    "parameter_count": 1
+  }
+}

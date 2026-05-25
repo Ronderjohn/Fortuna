@@ -1,0 +1,54 @@
+{
+  "name": "ema_crossover",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "long",
+  "indicators": [
+    {
+      "id": "ema_fast",
+      "type": "ema",
+      "params": { "window": 9 },
+      "source": "close"
+    },
+    {
+      "id": "ema_slow",
+      "type": "ema",
+      "params": { "window": 21 },
+      "source": "close"
+    }
+  ],
+  "rules": {
+    "entry_conditions": [
+      {
+        "type": "crossover",
+        "left": "ema_fast",
+        "right": "ema_slow"
+      }
+    ],
+    "exit_conditions": [
+      {
+        "type": "crossunder",
+        "left": "ema_fast",
+        "right": "ema_slow"
+      }
+    ],
+    "filters": []
+  },
+  "risk": {
+    "stop_loss": { "type": "percent", "value": 0.015 },
+    "take_profit": { "type": "percent", "value": 0.03 },
+    "position_sizing": { "type": "fixed_fraction", "value": 0.95 }
+  },
+  "metadata": {
+    "author": "system",
+    "version": "2.0",
+    "tags": ["trend", "ema", "intraday", "5m"],
+    "description": "Fast/slow EMA crossover tuned for NSE 5m intraday.",
+    "parameter_count": 2
+  },
+  "param_grid": {
+    "indicators.ema_fast.params.window": [7, 9, 12],
+    "indicators.ema_slow.params.window": [18, 21, 26]
+  }
+}

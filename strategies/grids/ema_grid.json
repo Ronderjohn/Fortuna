@@ -1,0 +1,4 @@
+{
+  "indicators.ema_fast.params.window": [8, 12, 16],
+  "indicators.ema_slow.params.window": [21, 26, 34]
+}

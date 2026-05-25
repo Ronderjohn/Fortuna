@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fortuna"
+version = "0.1.0"
+description = "Institutional-grade autonomous quant research system (Phase 1)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Fortuna" }]
+dependencies = [
+    "pandas>=2.1.0",
+    "numpy>=1.26.0",
+    "pyarrow>=14.0.0",
+    "duckdb>=0.10.0",
+    "yfinance>=0.2.36",
+    "numba>=0.59.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "pyyaml>=6.0.1",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+fortuna-backtest = "fortuna.cli.backtest:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+]
+vbt = [
+    "vectorbt>=0.26.0",
+]
+nse = [
+    "openchart>=0.2.0",
+]
+smartapi = [
+    "smartapi-python>=1.4.0",
+    "pyotp>=2.9.0",
+    "websocket-client>=1.6.0",
+    # smartapi-python imports `logzero` but does not declare it in its
+    # own pyproject — without this, every WS connect attempt silently
+    # raises ModuleNotFoundError.
+    "logzero>=1.7.0",
+]
+notebook = [
+    "jupyter>=1.0.0",
+    "ipykernel>=6.27.0",
+]
+gpu = [
+    "cupy-cuda12x>=13.0",
+]
+charts = [
+    "matplotlib>=3.8.0",
+]
+dashboard = [
+    "streamlit>=1.32.0",
+]
+# GTX 1650 / CUDA 11.x: use cupy-cuda11x instead of cupy-cuda12x
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv]
+package = true
+system-certs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --tb=short -m 'not slow and not integration'"
+# vectorbt: uv sync --group vbt | OpenChart: --group nse | SmartAPI: --group smartapi
+markers = [
+    "slow: vectorbt integration (requires uv sync --group vbt)",
+    "integration: network or heavy external deps",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

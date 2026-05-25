@@ -1,0 +1,24 @@
+{
+  "name": "mmts",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "both",
+  "indicators": [],
+  "rules": {
+    "entry_conditions": [],
+    "exit_conditions": [],
+    "filters": []
+  },
+  "risk": {
+    "position_sizing": { "type": "fixed_fraction", "value": 1.0 }
+  },
+  "metadata": {
+    "author": "system",
+    "version": "1.0",
+    "engine": "mmts",
+    "tags": ["mmts", "intraday", "trend", "measured_move"],
+    "description": "MMTS - Measured Move Trend Strategy (TradingView Pine parity)",
+    "parameter_count": 8
+  }
+}

@@ -1,0 +1,27 @@
+# Institutional 5m backtesting standard (load via FORTUNA_CONFIG or merge in pipeline)
+
+env: development
+log_level: INFO
+
+data:
+  cache_dir: data/market_cache
+  duckdb_path: data/fortuna.duckdb
+  default_symbol: ICICIBANK.NS
+  default_timeframe: "5m"
+  data_source: smartapi
+  cache_max_age_days: 7
+
+backtest:
+  init_cash: 100000
+  fees: 0.0003345
+  slippage: 0.0004
+
+scoring:
+  validation_threshold: 45.0
+  max_drawdown_threshold: 0.25
+  min_trades: 100
+  min_profit_factor: 1.2
+
+paths:
+  strategies_generated: strategies/generated
+  logs: logs

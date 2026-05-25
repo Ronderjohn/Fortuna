@@ -1,0 +1,46 @@
+{
+  "name": "macd_trend_5m",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "long",
+  "indicators": [
+    {
+      "id": "macd",
+      "type": "macd",
+      "params": { "window_fast": 12, "window_slow": 26, "window_sign": 9 },
+      "source": "close"
+    },
+    {
+      "id": "ema_trend",
+      "type": "ema",
+      "params": { "window": 50 },
+      "source": "close"
+    }
+  ],
+  "rules": {
+    "entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          { "type": "crossover", "left": "macd", "right": "macd_signal" },
+          { "type": "compare", "left": "close", "operator": "gt", "right": "ema_trend" }
+        ]
+      }
+    ],
+    "exit_conditions": [
+      { "type": "crossunder", "left": "macd", "right": "macd_signal" }
+    ],
+    "filters": []
+  },
+  "risk": {
+    "stop_loss": { "type": "percent", "value": 0.012 },
+    "take_profit": { "type": "percent", "value": 0.024 },
+    "position_sizing": { "type": "fixed_fraction", "value": 0.95 }
+  },
+  "metadata": {
+    "version": "1.0",
+    "tags": ["intraday", "macd", "trend", "5m"],
+    "description": "MACD signal cross with 50 EMA trend filter (common intraday trend follow)."
+  }
+}

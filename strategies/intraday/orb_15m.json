@@ -1,0 +1,19 @@
+{
+  "name": "orb_15m",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "both",
+  "indicators": [],
+  "rules": { "entry_conditions": [], "exit_conditions": [], "filters": [] },
+  "risk": {
+    "position_sizing": { "type": "fixed_fraction", "value": 1.0 }
+  },
+  "metadata": {
+    "engine": "orb",
+    "version": "1.0",
+    "tags": ["intraday", "orb", "opening_range", "5m"],
+    "description": "15-minute opening range breakout (popular NSE intraday).",
+    "parameter_count": 4
+  }
+}

@@ -1,0 +1,45 @@
+# Intraday / 5m tournament overrides (load via FORTUNA_CONFIG or merge in code)
+
+env: development
+log_level: INFO
+
+data:
+  cache_dir: data/market_cache
+  duckdb_path: data/fortuna.duckdb
+  default_symbol: ICICIBANK.NS
+  default_timeframe: "5m"
+  default_days: 30
+  data_source: smartapi  # fallback: yfinance (slow) or openchart (--group nse)
+  cache_max_age_days: 1
+  cache_max_age_hours: 4
+
+backtest:
+  init_cash: 100000
+  fees: 0.0005
+  slippage: 0.0005
+
+scoring:
+  validation_threshold: 45.0
+  max_drawdown_threshold: 0.20
+  min_trades: 5
+  min_profit_factor: 1.0
+  weights:
+    sharpe: 0.30
+    total_return: 0.10
+    drawdown_penalty: 0.30
+    profit_factor: 0.15
+    consistency: 0.15
+
+app:
+  parallel_workers: 6
+  live_refresh_seconds: 5
+  strategy_dirs:
+    - strategies/intraday
+    - strategies/generated
+    - strategies/builtin
+
+paths:
+  strategies_generated: strategies/generated
+  strategies_validated: strategies/validated
+  strategies_rejected: strategies/rejected
+  logs: logs

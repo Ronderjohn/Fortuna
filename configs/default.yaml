@@ -1,0 +1,43 @@
+# Fortuna default configuration
+
+env: development
+log_level: INFO
+
+data:
+  cache_dir: data/market_cache
+  duckdb_path: data/fortuna.duckdb
+  default_symbol: RELIANCE.NS
+  default_timeframe: "1d"
+  data_source: yfinance
+  cache_max_age_days: 1
+  cache_max_age_hours: 4
+
+backtest:
+  init_cash: 100000
+  fees: 0.001
+  slippage: 0.0005
+
+scoring:
+  validation_threshold: 50.0
+  weights:
+    sharpe: 0.35
+    total_return: 0.15
+    drawdown_penalty: 0.25
+    profit_factor: 0.15
+    consistency: 0.10
+  max_drawdown_threshold: 0.25
+  min_trades: 10
+  min_profit_factor: 1.0
+
+compute:
+  use_gpu: true
+  gpu_mem_fraction: 0.75
+  gpu_min_bars: 32
+  gpu_min_unique_series: 2
+  cpu_workers_when_gpu: 1
+
+paths:
+  strategies_generated: strategies/generated
+  strategies_validated: strategies/validated
+  strategies_rejected: strategies/rejected
+  logs: logs
