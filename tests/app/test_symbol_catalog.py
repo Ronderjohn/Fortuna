@@ -18,9 +18,20 @@ class _FakeRegistry(InstrumentRegistry):
         self._by_key = {r.symbol: r for r in refs}
         for r in refs:
             self._by_key[r.tradingsymbol] = r
+        self._futures_bases = []
+        self._futures_by_base = {}
+        self._futures_by_symbol = {}
 
     def catalog(self):
         return [self._hit_from_ref(self._by_key[b]) for b in self._equity_bases]
+
+    @property
+    def equity_count(self) -> int:
+        return len(self._equity_bases)
+
+    @property
+    def futures_base_count(self) -> int:
+        return len(self._futures_bases)
 
 
 def test_catalog_load_count() -> None:

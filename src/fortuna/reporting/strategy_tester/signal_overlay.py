@@ -31,7 +31,7 @@ def build_signal_frame(
         frame = frame.reindex(ohlcv.index)
 
     engine = builtin_engine_id(strategy)
-    if engine in ("mmts", "orb"):
+    if engine in ("mmts", "orb", "lsvwap", "ivorb"):
         return _builtin_signal_frame(frame, strategy.side)
 
     return _compiler_signal_frame(strategy, frame)
@@ -99,6 +99,8 @@ def suggest_overlay_columns(
     builtin_defaults: dict[str, list[str]] = {
         "mmts": ["ema_fast", "ema_slow", "bb_basis", "bb_upper", "bb_lower"],
         "orb": ["or_high", "or_low"],
+        "lsvwap": ["ema_fast", "vwap", "supertrend"],
+        "ivorb": ["ema_fast", "vwap", "or_high", "or_low"],
     }
     if engine and engine in builtin_defaults:
         cols = [c for c in builtin_defaults[engine] if c in enriched.columns]

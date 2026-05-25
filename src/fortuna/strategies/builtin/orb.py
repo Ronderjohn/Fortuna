@@ -109,7 +109,13 @@ def simulate_orb(
     init_cash: float,
     size_frac: float = 1.0,
 ) -> tuple[np.ndarray, list[float], pd.DataFrame]:
-    """Long/short simulator (same fill model as MMTS builtin)."""
+    """Long/short simulator (same fill model as MMTS builtin).
+
+    ORB is **single-entry per session** in Pine (``pyramiding = 0``). We must
+    force ``max_pyramids = 1`` on the MMTS fill loop, otherwise repeated
+    breakouts within the same session add to the existing position and over-
+    leverage the trade — a silent ORB realism bug.
+    """
     from fortuna.strategies.builtin.mmts import MMTSParams, simulate_mmts
 
     sig = compute_orb_signals(df, params)
@@ -117,6 +123,7 @@ def simulate_orb(
         atr_len=params.atr_len,
         atr_mult=params.atr_stop_mult,
         commission_rate=params.commission_rate,
+        max_pyramids=1,
     )
     return simulate_mmts(df, mp, init_cash=init_cash, size_frac=size_frac, signals=sig)
 

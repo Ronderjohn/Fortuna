@@ -3,7 +3,7 @@
   "market": "equity",
   "symbol": "ICICIBANK.NS",
   "timeframe": "5m",
-  "side": "long",
+  "side": "both",
   "indicators": [
     {
       "id": "ema_fast",
@@ -20,18 +20,16 @@
   ],
   "rules": {
     "entry_conditions": [
-      {
-        "type": "crossover",
-        "left": "ema_fast",
-        "right": "ema_slow"
-      }
+      { "type": "crossover", "left": "ema_fast", "right": "ema_slow" }
     ],
     "exit_conditions": [
-      {
-        "type": "crossunder",
-        "left": "ema_fast",
-        "right": "ema_slow"
-      }
+      { "type": "crossunder", "left": "ema_fast", "right": "ema_slow" }
+    ],
+    "short_entry_conditions": [
+      { "type": "crossunder", "left": "ema_fast", "right": "ema_slow" }
+    ],
+    "short_exit_conditions": [
+      { "type": "crossover", "left": "ema_fast", "right": "ema_slow" }
     ],
     "filters": []
   },
@@ -44,7 +42,7 @@
     "author": "system",
     "version": "2.0",
     "tags": ["trend", "ema", "intraday", "5m"],
-    "description": "Fast/slow EMA crossover tuned for NSE 5m intraday.",
+    "description": "9/21 EMA crossover, dual-side: long on bullish cross, short on bearish cross.",
     "parameter_count": 2
   },
   "param_grid": {

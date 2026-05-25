@@ -3,7 +3,7 @@
   "market": "equity",
   "symbol": "ICICIBANK.NS",
   "timeframe": "5m",
-  "side": "long",
+  "side": "both",
   "indicators": [
     {
       "id": "bb",
@@ -31,6 +31,18 @@
     "exit_conditions": [
       { "type": "crossunder", "left": "close", "right": "bb_middle" }
     ],
+    "short_entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          { "type": "crossunder", "left": "close", "right": "bb_lower" },
+          { "type": "compare", "left": "volume", "operator": "gt", "right": "volume_sma" }
+        ]
+      }
+    ],
+    "short_exit_conditions": [
+      { "type": "crossover", "left": "close", "right": "bb_middle" }
+    ],
     "filters": []
   },
   "risk": {
@@ -41,6 +53,6 @@
   "metadata": {
     "version": "1.0",
     "tags": ["intraday", "bollinger", "breakout", "5m"],
-    "description": "Bollinger upper-band breakout with volume (momentum expansion)."
+    "description": "Bollinger band breakout with volume. Long on upper-band breakout, short on lower-band breakdown; exit on basis-line reclaim."
   }
 }

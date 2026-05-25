@@ -1,0 +1,31 @@
+{
+  "name": "ivorb_5m",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "both",
+  "indicators": [],
+  "rules": { "entry_conditions": [], "exit_conditions": [], "filters": [] },
+  "risk": {
+    "position_sizing": { "type": "fixed_fraction", "value": 1.0 }
+  },
+  "metadata": {
+    "engine": "ivorb",
+    "version": "1.0",
+    "tags": [
+      "intraday",
+      "ivorb",
+      "opening_range",
+      "vwap",
+      "5m",
+      "ivorb_orb_minutes=15",
+      "ivorb_ema_len=20",
+      "ivorb_atr_len=14",
+      "ivorb_volume_mult=1.2",
+      "ivorb_risk_reward=2.0",
+      "ivorb_use_supertrend=true"
+    ],
+    "description": "5-minute Institutional VWAP Opening Range Breakout with EMA(20) trailing exit.",
+    "parameter_count": 11
+  }
+}

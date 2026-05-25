@@ -44,11 +44,23 @@ class BatchRunResult:
     elapsed_ms: float = 0.0
 
     def leaderboard_rows(self) -> list[dict]:
+        """Rank strategies for the dashboard leaderboard.
+
+        Sort order:
+        1. Strategies with at least one trade rank above strategies with zero
+           trades (a strategy that never executed has no evidence to claim a
+           win — it should always lose to one with real PnL even if negative).
+        2. Within the traded group, sort by net profit descending.
+        3. Within the zero-trade group, fall back to alphabetic for
+           deterministic ordering.
+        """
         rows = []
         for name, r in sorted(
             self.results.items(),
             key=lambda kv: (
+                0 if kv[1].report and kv[1].report.performance.total_trades > 0 else 1,
                 -(kv[1].report.performance.total_net_profit if kv[1].report else -1e18),
+                kv[0],
             ),
         ):
             if not r.report:
@@ -75,8 +87,16 @@ class BatchRunResult:
 
     @property
     def winner(self) -> Optional[str]:
+        """Strategy with the best **proven** track record on this run.
+
+        Returns ``None`` if no strategy traded — the leaderboard would only
+        contain zero-trade strategies which have no evidence to be crowned.
+        """
         rows = self.leaderboard_rows()
-        return rows[0]["strategy"] if rows else None
+        traded = [r for r in rows if r["trades"] > 0]
+        if traded:
+            return traded[0]["strategy"]
+        return None
 
 
 def _run_one(

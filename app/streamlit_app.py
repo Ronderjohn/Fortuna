@@ -244,15 +244,19 @@ def _init_session_state(settings) -> None:
         st.session_state.search_query = ""
 
 
-@st.dialog("Symbol search — NSE", width="large")
+@st.dialog("Symbol search — NSE + NFO", width="large")
 def _symbol_search_dialog(catalog: SymbolCatalog, settings) -> None:
-    """TradingView-style symbol picker over full market catalog."""
-    st.caption(f"**{catalog.count:,}** NSE equities loaded · SmartAPI · type to filter")
+    """TradingView-style symbol picker spanning NSE cash + NFO futures."""
+    st.caption(
+        f"**{catalog.equity_count:,}** NSE equities · "
+        f"**{catalog.futures_count:,}** NFO futures · "
+        "SmartAPI · type to filter (try `CROMPTON` to see both)"
+    )
 
     q = st.text_input(
         "Search",
         value=st.session_state.get("dialog_search", ""),
-        placeholder="Symbol or name — e.g. RELIANCE, ICICI, TATA STEEL",
+        placeholder="Symbol or name — e.g. RELIANCE, CROMPTON, NIFTY",
         label_visibility="collapsed",
         key="dialog_search_input",
     )

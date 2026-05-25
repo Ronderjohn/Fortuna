@@ -1,0 +1,30 @@
+{
+  "name": "lsvwap",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "both",
+  "indicators": [],
+  "rules": {
+    "entry_conditions": [],
+    "exit_conditions": [],
+    "filters": []
+  },
+  "risk": {
+    "position_sizing": { "type": "fixed_fraction", "value": 1.0 }
+  },
+  "metadata": {
+    "author": "system",
+    "version": "1.0",
+    "engine": "lsvwap",
+    "tags": [
+      "lsvwap",
+      "intraday",
+      "institutional",
+      "liquidity_sweep",
+      "vwap_reclaim"
+    ],
+    "description": "Institutional Liquidity Sweep + VWAP Reclaim (Pine parity). Long/short intraday reversal-with-trend setup: HH/HL + VWAP/EMA stack trend, sweep of prior bar's liquidity, VWAP reclaim, volume spike, NSE session window, optional Supertrend filter. Two-target partial exit (50% at 1R, 50% at 2R) with ATR stop.",
+    "parameter_count": 15
+  }
+}

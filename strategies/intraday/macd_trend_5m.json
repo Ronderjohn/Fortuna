@@ -3,7 +3,7 @@
   "market": "equity",
   "symbol": "ICICIBANK.NS",
   "timeframe": "5m",
-  "side": "long",
+  "side": "both",
   "indicators": [
     {
       "id": "macd",
@@ -31,6 +31,18 @@
     "exit_conditions": [
       { "type": "crossunder", "left": "macd", "right": "macd_signal" }
     ],
+    "short_entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          { "type": "crossunder", "left": "macd", "right": "macd_signal" },
+          { "type": "compare", "left": "close", "operator": "lt", "right": "ema_trend" }
+        ]
+      }
+    ],
+    "short_exit_conditions": [
+      { "type": "crossover", "left": "macd", "right": "macd_signal" }
+    ],
     "filters": []
   },
   "risk": {
@@ -41,6 +53,6 @@
   "metadata": {
     "version": "1.0",
     "tags": ["intraday", "macd", "trend", "5m"],
-    "description": "MACD signal cross with 50 EMA trend filter (common intraday trend follow)."
+    "description": "MACD signal cross with EMA(50) trend filter. Long on bullish cross above trend; short on bearish cross below trend."
   }
 }

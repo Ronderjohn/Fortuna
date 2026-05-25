@@ -13,7 +13,7 @@ from fortuna.backtesting.numpy_runner import NumPyBacktestRunner
 from fortuna.config.settings import Settings, get_settings
 from fortuna.indicators.engine import IndicatorEngine
 from fortuna.paper.account import PaperAccount
-from fortuna.strategy.schema import StrategyDefinition, TradeSide
+from fortuna.strategy.schema import StrategyDefinition
 from fortuna.strategies.builtin.dispatch import is_builtin_strategy, run_builtin_backtest
 from fortuna.utils.logging import get_logger
 
@@ -69,11 +69,6 @@ class PaperTradeEngine:
         if is_builtin_strategy(strategy):
             bt = run_builtin_backtest(strategy, ohlcv, symbol=symbol, init_cash=cash)
         else:
-            if strategy.side != TradeSide.LONG:
-                raise NotImplementedError(
-                    f"Paper engine supports long-only JSON strategies ({strategy.name}); "
-                    "use MMTS for long/short."
-                )
             bt = self._runner.run(strategy, ohlcv, symbol=symbol)
 
         trade_returns = list(bt.trade_returns or [])

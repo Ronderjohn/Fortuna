@@ -1,0 +1,30 @@
+{
+  "name": "lsvwap_5m",
+  "market": "equity",
+  "symbol": "ICICIBANK.NS",
+  "timeframe": "5m",
+  "side": "both",
+  "indicators": [],
+  "rules": { "entry_conditions": [], "exit_conditions": [], "filters": [] },
+  "risk": {
+    "position_sizing": { "type": "fixed_fraction", "value": 1.0 }
+  },
+  "metadata": {
+    "engine": "lsvwap",
+    "version": "1.0",
+    "tags": [
+      "intraday",
+      "lsvwap",
+      "institutional",
+      "5m",
+      "lsvwap_ema_len=20",
+      "lsvwap_atr_len=14",
+      "lsvwap_volume_mult=1.2",
+      "lsvwap_target_rr_1=1.0",
+      "lsvwap_target_rr_2=2.0",
+      "lsvwap_use_supertrend=true"
+    ],
+    "description": "5-minute liquidity-sweep + VWAP reclaim variant for NSE large-caps.",
+    "parameter_count": 15
+  }
+}

@@ -16,6 +16,7 @@ from fortuna.strategy.schema import (
     NotCondition,
     OrCondition,
     StrategyDefinition,
+    TradeSide,
 )
 from fortuna.utils.logging import get_logger
 
@@ -26,7 +27,12 @@ class StrategyCompiler:
     """Evaluate strategy DSL conditions against enriched OHLCV data."""
 
     def compile(self, strategy: StrategyDefinition, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-        """Return (entries, exits) boolean series aligned to df index."""
+        """Return (entries, exits) boolean series aligned to df index.
+
+        Single-direction surface kept for backward compat. For ``side: both``
+        strategies, prefer :meth:`compile_dual` so the short rules are
+        evaluated alongside the long rules.
+        """
         entries = self._combine_conditions(strategy.rules.entry_conditions, df)
         exits = self._combine_conditions(strategy.rules.exit_conditions, df)
 
@@ -38,7 +44,6 @@ class StrategyCompiler:
         exits = exits.fillna(False).astype(bool)
 
         if not exits.any() and entries.any():
-            # Default exit: last bar if no exit rules fired
             logger.debug("No exit signals; using entry offset exits only via vectorbt SL/TP")
 
         logger.info(
@@ -47,6 +52,59 @@ class StrategyCompiler:
             int(exits.sum()),
         )
         return entries, exits
+
+    def compile_dual(
+        self, strategy: StrategyDefinition, df: pd.DataFrame
+    ) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+        """Return ``(long_entries, long_exits, short_entries, short_exits)``.
+
+        Direction routing:
+
+        - ``side: long``  → primary rules drive longs; shorts are all False.
+        - ``side: short`` → primary rules drive shorts; longs are all False.
+        - ``side: both``  → primary rules drive longs, ``short_*_conditions``
+          drive shorts. If either short block is empty the corresponding
+          short series is all False (the strategy stays one-sided in
+          practice but can be flagged ``both`` during migration).
+
+        Filters AND against both the long and short entry series so the same
+        constraint applies symmetrically.
+        """
+        primary_entries = self._combine_conditions(strategy.rules.entry_conditions, df)
+        primary_exits = self._combine_conditions(strategy.rules.exit_conditions, df)
+        short_entries = self._combine_conditions(strategy.rules.short_entry_conditions, df)
+        short_exits = self._combine_conditions(strategy.rules.short_exit_conditions, df)
+
+        if strategy.rules.filters:
+            filters = self._combine_conditions(strategy.rules.filters, df)
+            primary_entries = primary_entries & filters
+            short_entries = short_entries & filters
+
+        primary_entries = primary_entries.fillna(False).astype(bool)
+        primary_exits = primary_exits.fillna(False).astype(bool)
+        short_entries = short_entries.fillna(False).astype(bool)
+        short_exits = short_exits.fillna(False).astype(bool)
+
+        false_series = pd.Series(False, index=df.index)
+        if strategy.side == TradeSide.LONG:
+            long_e, long_x = primary_entries, primary_exits
+            short_e, short_x = false_series, false_series
+        elif strategy.side == TradeSide.SHORT:
+            long_e, long_x = false_series, false_series
+            short_e, short_x = primary_entries, primary_exits
+        else:  # BOTH
+            long_e, long_x = primary_entries, primary_exits
+            short_e, short_x = short_entries, short_exits
+
+        logger.debug(
+            "compile_dual %s: long=%s/%s short=%s/%s",
+            strategy.name,
+            int(long_e.sum()),
+            int(long_x.sum()),
+            int(short_e.sum()),
+            int(short_x.sum()),
+        )
+        return long_e, long_x, short_e, short_x
 
     def _combine_conditions(self, conditions: list[Condition], df: pd.DataFrame) -> pd.Series:
         if not conditions:

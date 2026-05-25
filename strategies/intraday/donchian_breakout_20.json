@@ -3,13 +3,19 @@
   "market": "equity",
   "symbol": "ICICIBANK.NS",
   "timeframe": "5m",
-  "side": "long",
+  "side": "both",
   "indicators": [
     {
       "id": "high_20",
       "type": "rolling_high",
       "params": { "window": 20, "shift": 1 },
       "source": "high"
+    },
+    {
+      "id": "low_20",
+      "type": "rolling_low",
+      "params": { "window": 20, "shift": 1 },
+      "source": "low"
     },
     {
       "id": "ema_21",
@@ -31,6 +37,18 @@
     "exit_conditions": [
       { "type": "crossunder", "left": "close", "right": "ema_21" }
     ],
+    "short_entry_conditions": [
+      {
+        "type": "and",
+        "conditions": [
+          { "type": "compare", "left": "close", "operator": "lt", "right": "low_20" },
+          { "type": "compare", "left": "close", "operator": "lt", "right": "ema_21" }
+        ]
+      }
+    ],
+    "short_exit_conditions": [
+      { "type": "crossover", "left": "close", "right": "ema_21" }
+    ],
     "filters": []
   },
   "risk": {
@@ -41,6 +59,6 @@
   "metadata": {
     "version": "1.0",
     "tags": ["intraday", "donchian", "breakout", "momentum", "5m"],
-    "description": "20-bar high breakout with EMA trend (Turtle-style intraday)."
+    "description": "20-bar channel breakout with EMA trend (Turtle-style intraday). Long on high-20 breakout; short on low-20 breakdown."
   }
 }

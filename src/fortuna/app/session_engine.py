@@ -101,8 +101,11 @@ class FortunaSessionEngine:
         tf = timeframe or self.settings.default_timeframe
         d = days if days is not None else self.settings.default_days
         sym = symbol.upper().strip()
-        if not sym.endswith(".NS"):
-            sym = f"{sym}.NS" if "." not in sym else sym
+        # Only append the cash-equity ``.NS`` suffix when the input is a bare
+        # base symbol. Futures (``CROMPTON.FUT``) and explicit-exchange
+        # tradingsymbols already carry a dot and must be left untouched.
+        if "." not in sym and not sym.endswith("-EQ"):
+            sym = f"{sym}.NS"
 
         with self._lock:
             self.stop_live()

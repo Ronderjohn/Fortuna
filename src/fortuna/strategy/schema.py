@@ -120,10 +120,26 @@ NotCondition.model_rebuild()
 
 
 class RuleBlock(BaseModel):
-    """Entry, exit, and filter rules."""
+    """Entry, exit, and filter rules.
+
+    Backward-compatible dual-side support:
+
+    - ``entry_conditions`` / ``exit_conditions`` are the **primary side** rules.
+      When ``side: long``, they're treated as long entries / long exits.
+      When ``side: short``, they're treated as short entries / short exits.
+      When ``side: both``, they're treated as **long** entries / long exits
+      (the long side gets the "primary" rules for migration ease).
+    - ``short_entry_conditions`` / ``short_exit_conditions`` are **optional**
+      and only consulted when ``side: both``. If empty, the strategy is still
+      considered both-sided but emits no short trades — useful as a migration
+      step before authoring mirror rules.
+    - ``filters`` apply to both sides identically (AND'd against entries).
+    """
 
     entry_conditions: list[Condition] = Field(default_factory=list)
     exit_conditions: list[Condition] = Field(default_factory=list)
+    short_entry_conditions: list[Condition] = Field(default_factory=list)
+    short_exit_conditions: list[Condition] = Field(default_factory=list)
     filters: list[Condition] = Field(default_factory=list)
 
 

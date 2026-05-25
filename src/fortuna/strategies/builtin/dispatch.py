@@ -1,4 +1,4 @@
-"""Dispatch to builtin strategy engines (MMTS, ORB, etc.)."""
+"""Dispatch to builtin strategy engines (MMTS, ORB, LS-VWAP, IVWAP-ORB, …)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,17 @@ from typing import Callable, Optional
 import pandas as pd
 
 from fortuna.backtesting.engine import BacktestResult
-from fortuna.strategy.schema import StrategyDefinition
+from fortuna.strategies.builtin.ivorb import is_ivorb_strategy, run_ivorb_backtest
+from fortuna.strategies.builtin.lsvwap import is_lsvwap_strategy, run_lsvwap_backtest
 from fortuna.strategies.builtin.mmts import is_mmts_strategy, run_mmts_backtest
 from fortuna.strategies.builtin.orb import is_orb_strategy, run_orb_backtest
+from fortuna.strategy.schema import StrategyDefinition
 
 _BUILTIN: dict[str, Callable[..., BacktestResult]] = {
     "mmts": run_mmts_backtest,
     "orb": run_orb_backtest,
+    "lsvwap": run_lsvwap_backtest,
+    "ivorb": run_ivorb_backtest,
 }
 
 
@@ -25,6 +29,10 @@ def builtin_engine_id(strategy: StrategyDefinition) -> Optional[str]:
         return "mmts"
     if is_orb_strategy(strategy):
         return "orb"
+    if is_lsvwap_strategy(strategy):
+        return "lsvwap"
+    if is_ivorb_strategy(strategy):
+        return "ivorb"
     return None
 
 

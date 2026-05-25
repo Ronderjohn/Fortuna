@@ -21,6 +21,10 @@ class _FakeRegistry(InstrumentRegistry):
             "ICICIBANK": InstrumentRef("ICICIBANK", "ICICIBANK-EQ", "2", "NSE"),
             "TCS": InstrumentRef("TCS", "TCS-EQ", "3", "NSE"),
         }
+        # Empty futures indexes so the dual-segment search still works.
+        self._futures_bases = []
+        self._futures_by_base = {}
+        self._futures_by_symbol = {}
 
 
 def test_search_prefix() -> None:

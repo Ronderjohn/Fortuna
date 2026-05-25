@@ -3,7 +3,7 @@
   "market": "equity",
   "symbol": "ICICIBANK.NS",
   "timeframe": "5m",
-  "side": "long",
+  "side": "both",
   "indicators": [
     { "id": "rsi", "type": "rsi", "params": { "window": 7 }, "source": "close" },
     { "id": "ema_9", "type": "ema", "params": { "window": 9 }, "source": "close" }
@@ -12,9 +12,14 @@
     "entry_conditions": [
       { "type": "compare", "left": "rsi", "operator": "lt", "right": 30 }
     ],
-    "filters": [],
     "exit_conditions": [
       { "type": "compare", "left": "rsi", "operator": "gt", "right": 55 }
+    ],
+    "short_entry_conditions": [
+      { "type": "compare", "left": "rsi", "operator": "gt", "right": 70 }
+    ],
+    "short_exit_conditions": [
+      { "type": "compare", "left": "rsi", "operator": "lt", "right": 45 }
     ],
     "filters": []
   },
@@ -26,6 +31,6 @@
   "metadata": {
     "version": "1.0",
     "tags": ["intraday", "rsi", "scalp", "mean_reversion", "5m"],
-    "description": "Short RSI oversold scalp in micro-uptrend (common 5m mean reversion)."
+    "description": "RSI oversold/overbought mean-reversion scalp (5m). Long on RSI<30 exit at RSI>55; short on RSI>70 exit at RSI<45."
   }
 }

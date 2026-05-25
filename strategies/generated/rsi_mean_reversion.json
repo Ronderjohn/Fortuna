@@ -3,7 +3,7 @@
   "market": "equity",
   "symbol": "ICICIBANK.NS",
   "timeframe": "5m",
-  "side": "long",
+  "side": "both",
   "indicators": [
     {
       "id": "rsi",
@@ -23,28 +23,25 @@
       {
         "type": "and",
         "conditions": [
-          {
-            "type": "compare",
-            "left": "rsi",
-            "operator": "lt",
-            "right": 40
-          },
-          {
-            "type": "compare",
-            "left": "close",
-            "operator": "gt",
-            "right": "sma_trend"
-          }
+          { "type": "compare", "left": "rsi", "operator": "lt", "right": 40 },
+          { "type": "compare", "left": "close", "operator": "gt", "right": "sma_trend" }
         ]
       }
     ],
     "exit_conditions": [
+      { "type": "compare", "left": "rsi", "operator": "gt", "right": 60 }
+    ],
+    "short_entry_conditions": [
       {
-        "type": "compare",
-        "left": "rsi",
-        "operator": "gt",
-        "right": 60
+        "type": "and",
+        "conditions": [
+          { "type": "compare", "left": "rsi", "operator": "gt", "right": 60 },
+          { "type": "compare", "left": "close", "operator": "lt", "right": "sma_trend" }
+        ]
       }
+    ],
+    "short_exit_conditions": [
+      { "type": "compare", "left": "rsi", "operator": "lt", "right": 40 }
     ],
     "filters": []
   },
@@ -57,7 +54,7 @@
     "author": "system",
     "version": "2.0",
     "tags": ["mean_reversion", "rsi", "intraday", "5m"],
-    "description": "RSI oversold in short-term uptrend (5m intraday).",
+    "description": "RSI mean-reversion with short-term trend filter. Long on RSI<40 in micro-uptrend; short on RSI>60 in micro-downtrend.",
     "parameter_count": 2
   },
   "param_grid": {

@@ -1,4 +1,4 @@
-"""Background-loaded NSE equity catalog for TradingView-style symbol search."""
+"""Background-loaded NSE catalog (equity + futures) for symbol search."""
 
 from __future__ import annotations
 
@@ -11,10 +11,11 @@ from fortuna.data.instruments import InstrumentRegistry, SymbolSearchHit
 
 
 class SymbolCatalog:
-    """
-    Thread-safe wrapper around InstrumentRegistry for UI autocomplete.
+    """Thread-safe wrapper around ``InstrumentRegistry`` for UI autocomplete.
 
-    Load once at app startup; search runs in-memory over all NSE cash equities.
+    Loads both NSE cash equities and current-month NFO futures at app
+    startup; search returns hits across both segments tagged via
+    ``SymbolSearchHit.segment``.
     """
 
     def __init__(self, registry: Optional[InstrumentRegistry] = None) -> None:
@@ -33,23 +34,35 @@ class SymbolCatalog:
             else:
                 self._registry.ensure_loaded()
             self._hits = self._registry.catalog()
-            self._df = pd.DataFrame(
-                [
+            rows = []
+            for h in self._hits:
+                exchange = "NFO" if h.segment == "FUTURES" else "NSE"
+                rows.append(
                     {
                         "symbol": h.symbol,
                         "name": h.display.split(" — ")[0],
                         "tradingsymbol": h.tradingsymbol,
-                        "exchange": "NSE",
+                        "exchange": exchange,
+                        "segment": h.segment,
                     }
-                    for h in self._hits
-                ]
-            )
+                )
+            self._df = pd.DataFrame(rows)
             self._loaded = True
             return len(self._hits)
 
     @property
     def count(self) -> int:
         return len(self._hits)
+
+    @property
+    def equity_count(self) -> int:
+        self.ensure_loaded()
+        return self._registry.equity_count
+
+    @property
+    def futures_count(self) -> int:
+        self.ensure_loaded()
+        return self._registry.futures_base_count
 
     @property
     def dataframe(self) -> pd.DataFrame:
@@ -65,6 +78,8 @@ class SymbolCatalog:
         self.ensure_loaded()
         try:
             ref = self._registry.resolve(symbol)
+            if ref.is_future:
+                return f"{ref.name or ref.symbol} FUT — NFO"
             return f"{ref.symbol} — NSE"
         except KeyError:
             return symbol

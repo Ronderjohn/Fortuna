@@ -56,6 +56,7 @@ _OVERLAY_COLORS: dict[str, str] = {
     "bb_lower": "#2962FF",
     "or_high": "#2962FF",
     "or_low": "#F23645",
+    "supertrend": "#43A047",
     "rsi": "#7E57C2",
     "macd": "#2962FF",
     "macd_signal": "#FF9800",

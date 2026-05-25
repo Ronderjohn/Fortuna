@@ -75,5 +75,20 @@ class StrategyRanker:
         return dest_path
 
     def rank_many(self, ranked_list: list[RankedStrategy]) -> list[RankedStrategy]:
-        """Sort by composite score descending."""
-        return sorted(ranked_list, key=lambda r: r.score.composite, reverse=True)
+        """Sort traded strategies above zero-trade ones, then by composite score.
+
+        A strategy that never executed has no evidence to outrank one with
+        real (even losing) PnL. The previous sort by raw composite score
+        could crown zero-trade strategies — the same bug family that hit
+        the dashboard leaderboard. Primary key: ``total_trades > 0``;
+        secondary: composite score; tertiary: total_trades for tie-break.
+        """
+        return sorted(
+            ranked_list,
+            key=lambda r: (
+                r.result.metrics.total_trades > 0,
+                r.score.composite,
+                r.result.metrics.total_trades,
+            ),
+            reverse=True,
+        )
