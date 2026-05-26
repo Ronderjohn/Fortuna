@@ -83,6 +83,24 @@ class StrategyMetrics:
             "total_trades": p.total_trades,
         }
 
+    @classmethod
+    def zero(cls) -> "StrategyMetrics":
+        """Sentinel "no-trade" metrics. Sharpe is -1e9 so FilterVerdict.FAIL is guaranteed.
+
+        Used by the RL training loop when an early-stage policy produces zero trades
+        on a fold (common when the policy learns to HOLD everything). Downstream
+        consumers can treat these as the canonical "this strategy didn't trade" reply.
+        """
+        risk = RiskMetrics()
+        risk.sharpe_ratio = -1e9
+        risk.sortino_ratio = -1e9
+        risk.calmar_ratio = -1e9
+        return cls(
+            performance=PerformanceMetrics(),
+            risk=risk,
+            intraday=IntradayMetrics(),
+        )
+
 
 def _max_streak(pnls: np.ndarray, positive: bool) -> int:
     best = cur = 0

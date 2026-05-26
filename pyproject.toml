@@ -59,7 +59,20 @@ charts = [
 dashboard = [
     "streamlit>=1.32.0",
 ]
+rl = [
+    "gymnasium>=0.29",
+    "stable-baselines3>=2.3",
+    "sb3-contrib>=2.3",
+    "torch>=2.2",
+    "tensorboard>=2.16",
+    "tqdm>=4.66",
+]
+ml = [
+    "scikit-learn>=1.4",
+    "joblib>=1.3",
+]
 # GTX 1650 / CUDA 11.x: use cupy-cuda11x instead of cupy-cuda12x
+# GPU PyTorch: uv pip install --extra-index-url https://download.pytorch.org/whl/cu121 torch>=2.2
 
 [tool.setuptools.packages.find]
 where = ["src"]
