@@ -487,8 +487,8 @@ def main() -> None:
     render_strategy_comparison_grid(batch)
     render_live_signal_panel(live_signals, winner=winner)
 
-    tab_chart, tab_board, tab_report, tab_detail = st.tabs(
-        ["📈 Chart", "🏆 Leaderboard", "📊 Performance", "🔬 Strategy detail"]
+    tab_chart, tab_board, tab_report, tab_detail, tab_rl = st.tabs(
+        ["📈 Chart", "🏆 Leaderboard", "📊 Performance", "🔬 Strategy detail", "🤖 RL Policy"]
     )
 
     strategy_names = sorted(batch.results.keys())
@@ -615,6 +615,64 @@ def main() -> None:
             render_strategy_report_card(run.report)
             with st.expander("Raw JSON summary"):
                 st.json(run.report.summary_dict())
+
+    with tab_rl:
+        _render_rl_panel(engine, live_signals)
+
+
+def _render_rl_panel(engine, live_signals) -> None:
+    """Render the RL policy status + metadata card.
+
+    Shows a friendly empty-state when no checkpoint exists, otherwise
+    renders the OOS metrics + FilterVerdict + raw metadata.json.
+    """
+    rl_gen = getattr(engine, "rl_generator", None)
+    available = bool(rl_gen and getattr(rl_gen, "is_available", False))
+
+    cols = st.columns([3, 1])
+    cols[0].subheader("RL policy status")
+    if cols[1].button("Reload policy"):
+        ok = engine.reload_rl_generator()
+        if ok:
+            st.success("RL policy reloaded.")
+            st.rerun()
+        else:
+            st.warning("No RL policy available — deterministic fallback is active.")
+
+    if not available:
+        st.info(
+            "No validated RL checkpoint is loaded. Train one via "
+            "`uv run python scripts/run_rl_train.py` and promote it via "
+            "`uv run python scripts/promote_policy.py --run-id <id>`. "
+            "The dashboard continues to render deterministic signals."
+        )
+        return
+
+    meta = getattr(rl_gen, "metadata", None)
+    if meta is None:
+        st.warning("Policy loaded but metadata.json missing.")
+        return
+
+    badge = "PASS" if meta.verdict_passed else "FAIL"
+    st.markdown(f"**Run ID:** `{meta.run_id}` &nbsp;|&nbsp; **Verdict:** `{badge}` &nbsp;|&nbsp; "
+                f"**Policy:** `{meta.policy_type}`")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("OOS Sharpe", f"{meta.oos_metrics.sharpe_ratio:.2f}")
+    m2.metric("OOS PF", f"{meta.oos_metrics.profit_factor:.2f}")
+    m3.metric("OOS Trades", meta.oos_metrics.total_trades)
+    m4.metric("OOS MaxDD %", f"{meta.oos_metrics.max_drawdown_pct * 100:.2f}")
+
+    rl_keys = [k for k in live_signals if k.startswith("RL:")]
+    if rl_keys:
+        latest = live_signals[rl_keys[0]]
+        st.markdown(
+            f"**Latest RL signal:** `{latest.action}` at "
+            f"`{latest.bar_time}` close={latest.bar_close:.2f}"
+        )
+
+    with st.expander("metadata.json"):
+        st.json(meta.to_dict())
 
 
 if __name__ == "__main__":

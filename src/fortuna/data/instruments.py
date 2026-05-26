@@ -36,6 +36,10 @@ NSE_FO_EXCHANGE_TYPE = 2  # NSE futures & options
 _DEFAULT_MAX_AGE_HOURS = 24
 _FUT_SUFFIX = ".FUT"
 _EXPIRY_FMT = "%d%b%Y"  # Angel scrip-master format, e.g. "27NOV2025"
+# NSE always lists three monthly stock-future contracts at any given time
+# (near, mid, far month). The picker surfaces all of them by default so a
+# user can search/select beyond just the front-month expiry.
+_DEFAULT_CONTRACT_DEPTH = 3
 
 
 @dataclass(frozen=True)
@@ -80,9 +84,14 @@ class InstrumentRegistry:
         settings: Optional[SmartAPISettings] = None,
         *,
         project_root: Optional[Path] = None,
+        contract_depth: int = _DEFAULT_CONTRACT_DEPTH,
     ) -> None:
         self._settings = settings or get_smartapi_settings()
         self._project_root = project_root
+        # How many active contracts per futures base to expose in
+        # ``catalog()`` / ``search()``. NSE lists 3 monthly contracts;
+        # 1 = front-month only, 3 = full near/mid/far chain.
+        self._contract_depth = max(1, int(contract_depth))
         # Equity index: keyed by both base ("RELIANCE") and tradingsymbol
         # ("RELIANCE-EQ").
         self._by_key: dict[str, InstrumentRef] = {}
@@ -256,7 +265,11 @@ class InstrumentRegistry:
         return len(self._futures_bases)
 
     def catalog(self) -> list[SymbolSearchHit]:
-        """Full picker list — every NSE equity plus every futures-bearing base."""
+        """Full picker list — every NSE equity plus every active futures contract.
+
+        For futures, all non-expired contracts up to ``contract_depth`` are
+        surfaced (default 3 = near/mid/far month).
+        """
         self.ensure_loaded()
         hits: list[SymbolSearchHit] = []
         for base in self._equity_bases:
@@ -264,13 +277,16 @@ class InstrumentRegistry:
             if ref is not None:
                 hits.append(self._hit_from_ref(ref))
         for base in self._futures_bases:
-            front = self._front_future(base)
-            if front is not None:
-                hits.append(self._hit_from_future(front))
+            for idx, ref in enumerate(self._active_contracts(base)):
+                hits.append(self._hit_from_future(ref, is_front=(idx == 0)))
         return hits
 
     def search(self, query: str, *, limit: int = 20) -> list[SymbolSearchHit]:
-        """Prefix/substring match across both equities and futures."""
+        """Prefix/substring match across both equities and futures.
+
+        Each matching futures base contributes up to ``contract_depth``
+        active contracts (one row per expiry).
+        """
         self.ensure_loaded()
         q = query.upper().strip()
         if not q:
@@ -280,9 +296,8 @@ class InstrumentRegistry:
                 ref = self._by_key.get(base)
                 if ref:
                     hits.append(self._hit_from_ref(ref))
-                front = self._front_future(base)
-                if front is not None:
-                    hits.append(self._hit_from_future(front))
+                for idx, fut in enumerate(self._active_contracts(base)):
+                    hits.append(self._hit_from_future(fut, is_front=(idx == 0)))
             return hits[:limit]
 
         # Score both segments together — equities slightly outrank futures
@@ -301,36 +316,67 @@ class InstrumentRegistry:
         scored.sort(key=lambda t: (t[0], t[1], len(t[2]), t[2]))
 
         out: list[SymbolSearchHit] = []
-        seen: set[tuple[str, str]] = set()
+        seen_eq: set[str] = set()
+        seen_fut: set[tuple[str, str]] = set()  # (base, tradingsymbol)
         for _rank, _seg_rank, base, segment in scored:
-            key = (base, segment)
-            if key in seen:
-                continue
             if segment == "EQ":
+                if base in seen_eq:
+                    continue
                 ref = self._by_key.get(base)
                 if ref is None:
                     continue
                 out.append(self._hit_from_ref(ref))
+                seen_eq.add(base)
             else:
-                front = self._front_future(base)
-                if front is None:
+                contracts = self._active_contracts(base)
+                if not contracts:
                     continue
-                out.append(self._hit_from_future(front))
-            seen.add(key)
+                for idx, fut in enumerate(contracts):
+                    key = (base, fut.tradingsymbol)
+                    if key in seen_fut:
+                        continue
+                    out.append(self._hit_from_future(fut, is_front=(idx == 0)))
+                    seen_fut.add(key)
+                    if len(out) >= limit:
+                        break
             if len(out) >= limit:
                 break
         return out
 
     def _front_future(self, base: str, *, on: Optional[date] = None) -> Optional[InstrumentRef]:
-        """Return the nearest non-expired contract for ``base`` (or None)."""
+        """Return the nearest non-expired contract for ``base`` (or None).
+
+        Kept for callers that only care about the front month (e.g.
+        ``RELIANCE.FUT`` resolution).
+        """
+        active = self._active_contracts(base, depth=1, on=on)
+        if active:
+            return active[0]
+        chain = self._futures_by_base.get(base.upper())
+        return chain[-1] if chain else None
+
+    def _active_contracts(
+        self,
+        base: str,
+        *,
+        depth: Optional[int] = None,
+        on: Optional[date] = None,
+    ) -> list[InstrumentRef]:
+        """Return up to ``depth`` non-expired contracts for ``base``.
+
+        Contracts are returned ordered by expiry ascending (front-month
+        first). When every contract has expired the chain's tail is
+        returned so the picker still surfaces something.
+        """
         chain = self._futures_by_base.get(base.upper())
         if not chain:
-            return None
+            return []
         today = on or date.today()
-        for ref in chain:
-            if ref.expiry is None or ref.expiry >= today:
-                return ref
-        return chain[-1]  # all contracts expired — fall back to the latest
+        n = self._contract_depth if depth is None else max(1, int(depth))
+        active = [ref for ref in chain if ref.expiry is None or ref.expiry >= today]
+        if not active:
+            return [chain[-1]]
+        return active[:n]
 
     @staticmethod
     def _hit_from_ref(ref: InstrumentRef) -> SymbolSearchHit:
@@ -343,16 +389,31 @@ class InstrumentRegistry:
         )
 
     @staticmethod
-    def _hit_from_future(ref: InstrumentRef) -> SymbolSearchHit:
+    def _hit_from_future(ref: InstrumentRef, *, is_front: bool = True) -> SymbolSearchHit:
+        """Build a picker hit for one futures contract.
+
+        Front-month contracts keep the bare ``BASE.FUT`` symbol so existing
+        watchlists/strategies continue to track the rolling front-month.
+        Back-month contracts use the explicit ``BASE.FUT.DDMMMYYYY`` form
+        so the picker can show one row per expiry without collapsing.
+        """
         base = ref.name or ref.symbol.replace(_FUT_SUFFIX, "")
         if ref.expiry is not None:
             exp_label = ref.expiry.strftime("%d-%b-%Y")
-            display = f"{base} FUT — {ref.tradingsymbol} (NFO, exp {exp_label})"
+            tag = "front" if is_front else "back"
+            display = f"{base} FUT {exp_label} — {ref.tradingsymbol} (NFO, {tag})"
+            if is_front:
+                fortuna_symbol = ref.symbol  # e.g. "RELIANCE.FUT"
+            else:
+                fortuna_symbol = (
+                    f"{ref.symbol}.{ref.expiry.strftime(_EXPIRY_FMT).upper()}"
+                )
         else:
             display = f"{base} FUT — {ref.tradingsymbol} (NFO)"
+            fortuna_symbol = ref.symbol
         return SymbolSearchHit(
             display=display,
-            symbol=ref.symbol,
+            symbol=fortuna_symbol,
             tradingsymbol=ref.tradingsymbol,
             segment="FUTURES",
         )

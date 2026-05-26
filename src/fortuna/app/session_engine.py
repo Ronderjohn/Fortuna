@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
 from fortuna.app.config import AppConfig
 from fortuna.app.live_session import LiveSessionBridge
-from fortuna.app.live_signals import LiveSignal, compute_live_signals
+from fortuna.app.live_signals import (
+    LiveSignal,
+    compute_live_signals,
+    compute_live_signals_with_rl,
+)
 from fortuna.app.parallel_runner import BatchRunResult, ParallelStrategyRunner
 from fortuna.app.strategy_paths import list_strategy_paths
 from fortuna.config.settings import Settings
@@ -65,6 +70,8 @@ class SessionState:
     live_signals: dict[str, LiveSignal] = field(default_factory=dict)
     last_bar_time: Optional[pd.Timestamp] = None
     last_signal_refresh: Optional[pd.Timestamp] = None
+    rl_run_id: Optional[str] = None
+    rl_available: bool = False
 
 
 class FortunaSessionEngine:
@@ -79,6 +86,70 @@ class FortunaSessionEngine:
         self._lock = threading.RLock()
         self._state = SessionState()
         self._live: Optional[LiveSessionBridge] = None
+        self._rl_generator = self._load_rl_generator()
+        self._regime_router = self._load_regime_router()
+
+    def _load_regime_router(self):
+        """Load the trained ``RegimeDetector`` for regime-aware strategy routing.
+
+        Falls back to a stub router (``is_available=False``) when no classifier
+        is present, which keeps the dashboard on the all-strategies code path.
+        """
+        try:
+            from fortuna.strategies.regime_router import RegimeRouter
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("regime router imports unavailable: %s", exc)
+            return None
+        try:
+            return RegimeRouter.from_disk("models/regime/classifier.joblib")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("RegimeRouter init failed: %s", exc)
+            return None
+
+    def reload_regime_router(self) -> bool:
+        """Pick up a freshly-trained RegimeDetector without restarting."""
+        self._regime_router = self._load_regime_router()
+        return bool(self._regime_router and getattr(self._regime_router, "is_available", False))
+
+    @property
+    def regime_router(self):
+        return self._regime_router
+
+    def _load_rl_generator(self):
+        """Load the validated RL policy (if any) at startup.
+
+        Returns ``None`` silently if no checkpoint is available — the
+        deterministic signal path continues to drive the dashboard.
+        """
+        try:
+            from fortuna.rl.inference import (
+                RLSignalGenerator,
+                resolve_live_checkpoint_dir,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("RL inference imports unavailable: %s", exc)
+            return None
+
+        try:
+            live_dir = resolve_live_checkpoint_dir(Path("models"))
+            if live_dir is None:
+                return RLSignalGenerator(None)  # explicit unavailable instance
+            return RLSignalGenerator(live_dir)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("RLSignalGenerator failed to initialize: %s", exc)
+            return None
+
+    def reload_rl_generator(self) -> bool:
+        """Pick up a freshly promoted ``models/live/`` policy without restart.
+
+        Returns ``True`` if a policy is loaded after the reload, ``False`` otherwise.
+        """
+        self._rl_generator = self._load_rl_generator()
+        return bool(self._rl_generator and getattr(self._rl_generator, "is_available", False))
+
+    @property
+    def rl_generator(self):
+        return self._rl_generator
 
     @property
     def state(self) -> SessionState:
@@ -119,13 +190,23 @@ class FortunaSessionEngine:
                 ohlcv = self._mdm.get_ohlcv(sym, tf, days=d)
             paths = list_strategy_paths(self.settings, self.app_config)
             batch = self._runner.run_parallel(ohlcv, paths, symbol=sym, timeframe=tf)
-            signals = compute_live_signals(paths, ohlcv)
+            signals = compute_live_signals_with_rl(
+                paths, ohlcv,
+                rl_generator=self._rl_generator,
+                regime_router=self._regime_router,
+                symbol=sym,
+            )
             with self._lock:
                 self._state.ohlcv = ohlcv
                 self._state.batch = batch
                 self._state.live_signals = signals
                 self._state.last_bar_time = pd.Timestamp(ohlcv.index[-1]) if len(ohlcv) else None
                 self._state.last_signal_refresh = pd.Timestamp.utcnow()
+                self._state.rl_available = bool(
+                    self._rl_generator and getattr(self._rl_generator, "is_available", False)
+                )
+                meta = getattr(self._rl_generator, "metadata", None) if self._rl_generator else None
+                self._state.rl_run_id = getattr(meta, "run_id", None) if meta else None
             logger.info("Loaded %s: %d bars, %d strategies", sym, len(ohlcv), len(batch.results))
         except Exception as e:
             logger.exception("Load failed for %s", sym)
@@ -187,7 +268,12 @@ class FortunaSessionEngine:
             return
         paths = list_strategy_paths(self.settings, self.app_config)
         batch = self._runner.run_parallel(ohlcv, paths, symbol=sym, timeframe=tf)
-        signals = compute_live_signals(paths, ohlcv)
+        signals = compute_live_signals_with_rl(
+            paths, ohlcv,
+            rl_generator=self._rl_generator,
+            regime_router=self._regime_router,
+            symbol=sym,
+        )
         with self._lock:
             self._state.ohlcv = ohlcv
             self._state.batch = batch
@@ -204,7 +290,14 @@ class FortunaSessionEngine:
         if ohlcv is None or ohlcv.empty:
             return {}
         paths = list_strategy_paths(self.settings, self.app_config)
-        signals = compute_live_signals(paths, ohlcv)
+        with self._lock:
+            sym = self._state.symbol
+        signals = compute_live_signals_with_rl(
+            paths, ohlcv,
+            rl_generator=self._rl_generator,
+            regime_router=self._regime_router,
+            symbol=sym,
+        )
         with self._lock:
             self._state.live_signals = signals
             self._state.last_bar_time = pd.Timestamp(ohlcv.index[-1])
