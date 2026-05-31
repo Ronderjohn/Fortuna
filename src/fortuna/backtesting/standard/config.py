@@ -37,6 +37,14 @@ class MarketCostModel:
         per_side = self.brokerage_rate + self.exchange_fee_rate + self.slippage_rate + self.spread_rate
         return 2 * per_side
 
+    def total_cost_pct(self) -> float:
+        """Round-trip cost expressed in percent (matches the units used by RL rewards).
+
+        The Phase 2 reward function works in percentage points (e.g. 0.5 = 0.5% return)
+        so trade frictions are subtracted in the same scale.
+        """
+        return self.round_trip_rate * 100.0
+
 
 @dataclass(frozen=True)
 class SessionRules:

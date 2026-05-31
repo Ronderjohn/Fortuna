@@ -26,6 +26,29 @@ class IndicatorEngine:
             return df
         return pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
+    def compute_for_bar(
+        self,
+        raw_df: pd.DataFrame,
+        indicators: list[IndicatorSpec],
+        *,
+        lookback: int = 300,
+    ) -> pd.Series:
+        """Compute only the latest row of indicators without reprocessing full history.
+
+        Hot path for live inference (called every 5m bar). Recomputes the indicator
+        stack over a fixed tail window (``lookback`` bars, default 300 = ~25 NSE
+        5m sessions) and returns only the last row. For pandas-based rolling
+        windows (EMA/SMA/ATR/MACD/Bollinger/RSI) this is numerically identical
+        to a full-history pass once ``lookback`` exceeds the largest window.
+
+        Target: < 10 ms on CPU for the Phase 2 RL feature stack.
+        """
+        if raw_df is None or len(raw_df) == 0:
+            raise ValueError("compute_for_bar() requires a non-empty OHLCV frame")
+        tail = raw_df.iloc[-lookback:] if lookback and len(raw_df) > lookback else raw_df
+        enriched = self.compute(tail, indicators)
+        return enriched.iloc[-1]
+
     def _apply_one(
         self,
         df: pd.DataFrame,

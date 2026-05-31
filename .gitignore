@@ -51,6 +51,18 @@ logs/*
 !logs/README.md
 !logs/.gitkeep
 
+# RL/ML checkpoints (regenerable via scripts/nightly_train.py).
+# Keep the directory layout discoverable via a .gitkeep but never the
+# binary PPO weights themselves — they can easily reach hundreds of MB.
+models/
+!models/.gitkeep
+
+# Generated nightly / smoke reports.
+reports/
+
+# Local scratch notes / one-off command logs (not part of the repo).
+nightly_runs_cmds.txt
+
 # ─── Phase planning drafts (not part of the public repo) ─────────────────
 Phase_2.md
 
@@ -67,8 +79,4 @@ Phase_2.md
 .DS_Store
 Thumbs.db
 
-# ─── Logs ─────────────────────────────────────────────────────────────────
-logs/*
-!logs/README.md
-!logs/.gitkeep 
 

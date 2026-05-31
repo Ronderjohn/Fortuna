@@ -98,3 +98,42 @@ def test_forming_bar_df_is_tz_naive_for_chart_concat() -> None:
     merged = pd.concat([_hist(), forming]).sort_index()
     assert merged.index.is_monotonic_increasing
     assert pd.Timestamp("2026-05-25 11:40") in merged.index
+
+
+def test_forming_bar_df_rejects_timestamp_before_last_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stale morning buckets must not be exposed when history already has afternoon bars."""
+    hist = pd.DataFrame(
+        {
+            "open": [100.0],
+            "high": [101.0],
+            "low": [99.5],
+            "close": [100.5],
+            "volume": [1000],
+        },
+        index=pd.DatetimeIndex([pd.Timestamp("2026-05-27 15:20")]),
+    )
+    manager = MagicMock()
+    bridge = LiveSessionBridge(manager, "TEST.FUT", "5m", hist)
+
+    fake_feed = MagicMock()
+    fake_feed.aggregator.current_bar = OhlcvBar(
+        datetime=pd.Timestamp("2026-05-27 09:45"),
+        open=290.0,
+        high=291.0,
+        low=289.5,
+        close=290.5,
+        volume=100,
+    )
+    bridge._feed = fake_feed
+
+    fixed_now = pd.Timestamp("2026-05-27 15:25:00", tz="Asia/Kolkata")
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        staticmethod(lambda tz=None: fixed_now if tz is not None else fixed_now.tz_localize(None)),
+    )
+
+    forming = bridge.forming_bar_df()
+    assert forming is None

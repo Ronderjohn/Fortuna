@@ -27,8 +27,9 @@ Streamlit refresh / WebSocket tick.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -38,8 +39,31 @@ from fortuna.strategy.loader import load_strategy
 from fortuna.strategy.schema import StrategyDefinition, TradeSide
 from fortuna.strategies.builtin.dispatch import builtin_engine_id
 from fortuna.utils.logging import get_logger
+from fortuna.utils.timing import timed_step
 
 logger = get_logger(__name__)
+
+
+class SignalType(str, Enum):
+    """Canonical signal taxonomy shared by deterministic and RL paths.
+
+    The underlying value is the string used in JSON payloads and chart markers
+    so existing dashboards continue to receive the same shape.
+    """
+
+    BUY = "BUY"
+    SELL = "SELL"
+    EXIT = "EXIT"
+    HOLD = "HOLD"
+    IN_LONG = "IN_LONG"
+    IN_SHORT = "IN_SHORT"
+
+    @classmethod
+    def from_action(cls, action: str) -> "SignalType":
+        """Map a ``LiveSignal.action`` string to a SignalType, collapsing EXIT_*."""
+        if action in {"EXIT_LONG", "EXIT_SHORT"}:
+            return cls.EXIT
+        return cls(action)
 
 _INDICATOR_ENGINE = IndicatorEngine()
 _COMPILER = StrategyCompiler()
@@ -72,9 +96,28 @@ class LiveSignal:
     color: str = _C_HOLD
     exit_reason: Optional[str] = None
     """For EXIT actions: 'stop', 'target', 'ema_trail', 'tp1', 'tp2', 'flip', …"""
+    # ---- RL confidence-filter overlay (Phase 2.1) ----
+    rl_confidence: Optional[str] = None
+    """One of: ``agree``, ``neutral``, ``disagree``, or ``None`` (filter inactive)."""
+    rl_action: Optional[str] = None
+    """Raw RL action observed at the same bar (BUY / SELL / EXIT / HOLD / IN_*)."""
+    rl_run_id: Optional[str] = None
+    """Short run-id of the policy that produced ``rl_action``."""
+    rl_suppressed: bool = False
+    """True when the RL disagreed strongly enough to veto an actionable signal."""
+    # ---- Regime overlay (Phase 2.2) ----
+    regime: Optional[str] = None
+    """Classified market regime: ``TRENDING`` / ``RANGING`` / ``VOLATILE`` / ``None``."""
+    regime_confidence: float = 0.0
+    """Detector's confidence (0..1) in the regime classification."""
 
     def is_actionable(self) -> bool:
         return self.action in {"BUY", "SELL", "EXIT_LONG", "EXIT_SHORT"}
+
+    @property
+    def action_type(self) -> SignalType:
+        """SignalType form of ``action`` — convenient for RL/agent code."""
+        return SignalType.from_action(self.action)
 
 
 # ───────────────────────────── lifecycle walker ──────────────────────────────
@@ -243,27 +286,33 @@ def compute_live_signal(
     *,
     strategy_name: Optional[str] = None,
 ) -> Optional[LiveSignal]:
-    """Compute the current (latest-bar) signal for one strategy."""
+    """Compute the current (latest-bar) signal for one strategy.
+
+    Wrapped in ``timed_step`` so the deterministic baseline latency is observable;
+    Phase 2 RL inference must stay within +50ms of this baseline.
+    """
     if ohlcv is None or ohlcv.empty:
         return None
     name = strategy_name or strategy.name
 
-    try:
-        engine = builtin_engine_id(strategy)
-        if engine:
-            from fortuna.strategies.builtin.dispatch import run_builtin_backtest
+    with timed_step("live_signal") as details:
+        details["strategy"] = name
+        try:
+            engine = builtin_engine_id(strategy)
+            if engine:
+                from fortuna.strategies.builtin.dispatch import run_builtin_backtest
 
-            bt = run_builtin_backtest(strategy, ohlcv)
-            enriched = bt.enriched_data
-            return _signal_from_builtin(enriched, ohlcv, name, strategy)
-        enriched = _INDICATOR_ENGINE.compute(ohlcv, strategy.indicators)
-        long_e, long_x, short_e, short_x = _COMPILER.compile_dual(strategy, enriched)
-        return _signal_from_dsl(
-            strategy, ohlcv, name, long_e, long_x, short_e, short_x
-        )
-    except Exception as exc:
-        logger.debug("live signal failed for %s: %s", name, exc)
-        return None
+                bt = run_builtin_backtest(strategy, ohlcv)
+                enriched = bt.enriched_data
+                return _signal_from_builtin(enriched, ohlcv, name, strategy)
+            enriched = _INDICATOR_ENGINE.compute(ohlcv, strategy.indicators)
+            long_e, long_x, short_e, short_x = _COMPILER.compile_dual(strategy, enriched)
+            return _signal_from_dsl(
+                strategy, ohlcv, name, long_e, long_x, short_e, short_x
+            )
+        except Exception as exc:
+            logger.debug("live signal failed for %s: %s", name, exc)
+            return None
 
 
 def _signal_from_builtin(
@@ -534,4 +583,186 @@ def compute_live_signals(
         sig = compute_live_signal(strategy, ohlcv, strategy_name=path.stem)
         if sig is not None:
             out[path.stem] = sig
+    return out
+
+
+def _rl_directional_bias(action_str: str) -> int:
+    """Return +1/0/-1 directional bias from the RL discrete action.
+
+    Used to compare against a deterministic signal: same sign = ``agree``,
+    opposite sign = ``disagree``, zero = ``neutral``.
+    """
+    if action_str in ("BUY", "IN_LONG"):
+        return 1
+    if action_str in ("SELL", "IN_SHORT"):
+        return -1
+    return 0
+
+
+def _deterministic_directional_bias(action_str: str) -> int:
+    """Same +1/0/-1 mapping for a deterministic strategy's action."""
+    if action_str in ("BUY", "IN_LONG"):
+        return 1
+    if action_str in ("SELL", "IN_SHORT"):
+        return -1
+    return 0
+
+
+def _classify_confidence(det_bias: int, rl_bias: int) -> str:
+    """``agree`` when same non-zero sign, ``disagree`` when opposite signs,
+    ``neutral`` in any other combination (either side is HOLD/EXIT)."""
+    if det_bias == 0 or rl_bias == 0:
+        return "neutral"
+    return "agree" if det_bias == rl_bias else "disagree"
+
+
+def compute_live_signals_with_rl(
+    strategy_paths: list[Path],
+    ohlcv: pd.DataFrame,
+    *,
+    rl_generator: Any = None,
+    position_state: Any = None,
+    veto_on_disagree: bool = False,
+    regime_router: Any = None,
+    symbol: str = "",
+) -> dict[str, LiveSignal]:
+    """Phase 2 superset of ``compute_live_signals`` with RL confidence overlay.
+
+    The RL policy is used in **two complementary modes**:
+
+    1. **Confidence annotation** (always on when RL is available):
+       Each deterministic ``LiveSignal`` is tagged with one of
+       ``agree`` / ``neutral`` / ``disagree`` by comparing its directional
+       bias to the RL policy's discrete action for the same bar. The raw
+       RL action + short run-id are also stored on the signal for the
+       dashboard to display.
+
+    2. **Optional veto** (``veto_on_disagree=True``):
+       Actionable signals (``BUY`` / ``SELL``) where the RL strongly
+       disagrees (opposite directional bias) get their ``enter`` flag
+       cleared and ``rl_suppressed`` set, downgrading them to ``HOLD``.
+
+    The standalone ``RL:<short_id>`` strategy row is also appended (as
+    before) so the leaderboard still shows RL as a first-class strategy.
+
+    All RL paths are wrapped — any failure falls back silently to the
+    deterministic-only output.
+
+    When a ``regime_router`` is supplied AND the underlying ``RegimeDetector``
+    is available, ``strategy_paths`` is first filtered to only those strategies
+    appropriate for the currently-classified regime (trending/ranging/volatile).
+    Skipped strategies are not evaluated; the dashboard sees them as absent.
+    """
+    # Optional regime-aware pre-filter on the deterministic strategy set.
+    routing_label: Optional[str] = None
+    routing_conf: float = 0.0
+    if regime_router is not None and getattr(regime_router, "is_available", False):
+        try:
+            routing = regime_router.route(strategy_paths, ohlcv, symbol=symbol)
+            routing_label = routing.regime
+            routing_conf = routing.confidence
+            if routing.allowed:
+                strategy_paths = routing.allowed
+                logger.debug(
+                    "[regime_router] %s -> %d/%d strategies (conf=%.2f)",
+                    routing_label, len(routing.allowed),
+                    len(routing.allowed) + len(routing.skipped),
+                    routing_conf,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("regime routing failed: %s", exc)
+
+    out = compute_live_signals(strategy_paths, ohlcv)
+
+    # Stamp every output with the routing decision (if any) so the dashboard
+    # can show "active regime" alongside each row.
+    if routing_label is not None:
+        for sig in out.values():
+            if sig.regime is None:
+                sig.regime = routing_label
+                sig.regime_confidence = routing_conf
+    if rl_generator is None or not getattr(rl_generator, "is_available", False):
+        return out
+    if ohlcv is None or ohlcv.empty:
+        return out
+
+    try:
+        position = position_state
+        if position is None:
+            from fortuna.features.position import PositionState as _PS
+
+            position = _PS()
+        rl_signal = rl_generator.predict_from_ohlcv(ohlcv, position)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("RL signal failed: %s", exc)
+        return out
+
+    if rl_signal is None:
+        return out
+
+    meta = getattr(rl_generator, "metadata", None)
+    run_id = getattr(meta, "run_id", "rl") if meta is not None else "rl"
+    short_id = (run_id or "rl")[:8]
+    label_key = f"RL:{short_id}"
+
+    sig_type = rl_signal.signal
+    action_str = sig_type.value if hasattr(sig_type, "value") else str(sig_type)
+    color = {
+        "BUY": _C_BUY,
+        "SELL": _C_SELL,
+        "EXIT": _C_EXIT,
+        "EXIT_LONG": _C_EXIT,
+        "EXIT_SHORT": _C_EXIT,
+        "HOLD": _C_HOLD,
+        "IN_LONG": _C_IN_POS,
+        "IN_SHORT": _C_IN_POS,
+    }.get(action_str, _C_HOLD)
+
+    side_label = None
+    if action_str in ("BUY", "IN_LONG", "EXIT_LONG"):
+        side_label = "LONG"
+    elif action_str in ("SELL", "IN_SHORT", "EXIT_SHORT"):
+        side_label = "SHORT"
+
+    out[label_key] = LiveSignal(
+        strategy_name=label_key,
+        action=action_str,
+        label=action_str,
+        bar_time=rl_signal.timestamp,
+        bar_close=rl_signal.bar_close,
+        enter=action_str in ("BUY", "SELL"),
+        exit=action_str in ("EXIT", "EXIT_LONG", "EXIT_SHORT"),
+        in_position=position.is_open if hasattr(position, "is_open") else False,
+        side=side_label,
+        entry_price=None,
+        bars_in_trade=position.bars_held if hasattr(position, "bars_held") else 0,
+        color=color,
+        exit_reason="rl_policy" if action_str.startswith("EXIT") else None,
+        rl_confidence="agree",  # RL trivially agrees with itself
+        rl_action=action_str,
+        rl_run_id=short_id,
+    )
+
+    # ---- Apply the confidence overlay to every deterministic signal.
+    rl_bias = _rl_directional_bias(action_str)
+    for key, sig in list(out.items()):
+        if key == label_key:
+            continue  # don't re-annotate the RL row
+        det_bias = _deterministic_directional_bias(sig.action)
+        verdict = _classify_confidence(det_bias, rl_bias)
+        sig.rl_confidence = verdict
+        sig.rl_action = action_str
+        sig.rl_run_id = short_id
+
+        if veto_on_disagree and verdict == "disagree" and sig.enter:
+            sig.enter = False
+            sig.rl_suppressed = True
+            sig.action = "HOLD"
+            sig.label = "HOLD"
+            sig.color = _C_HOLD
+            sig.exit_reason = "rl_veto"
+            logger.info(
+                "[rl_filter] vetoed %s (det=%s rl=%s) on bar %s",
+                key, sig.label, action_str, sig.bar_time,
+            )
     return out

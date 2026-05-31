@@ -20,6 +20,28 @@ class FoldRecord:
     candidate_id: str
     params_summary: str
 
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-safe serialization (numpy scalars become Python floats, ints stay ints)."""
+        return {
+            "fold_id": int(self.fold_id),
+            "profit_pct": float(self.profit_pct),
+            "win_ratio_pct": float(self.win_ratio_pct),
+            "total_trades": int(self.total_trades),
+            "candidate_id": str(self.candidate_id),
+            "params_summary": str(self.params_summary),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FoldRecord":
+        return cls(
+            fold_id=int(data["fold_id"]),
+            profit_pct=float(data["profit_pct"]),
+            win_ratio_pct=float(data["win_ratio_pct"]),
+            total_trades=int(data["total_trades"]),
+            candidate_id=str(data.get("candidate_id", "")),
+            params_summary=str(data.get("params_summary", "")),
+        )
+
 
 @dataclass
 class StrategyLearningState:
@@ -36,7 +58,7 @@ class StrategyLearningState:
         return {
             "strategy_stem": self.strategy_stem,
             "best_params": self.best_params,
-            "fold_history": [f.__dict__ for f in self.fold_history],
+            "fold_history": [f.to_dict() for f in self.fold_history],
             "cumulative_oos_profit_pct": self.cumulative_oos_profit_pct,
             "generation": self.generation,
             "param_grid": self.param_grid,
@@ -44,7 +66,7 @@ class StrategyLearningState:
 
     @classmethod
     def from_dict(cls, data: dict) -> StrategyLearningState:
-        folds = [FoldRecord(**f) for f in data.get("fold_history", [])]
+        folds = [FoldRecord.from_dict(f) for f in data.get("fold_history", [])]
         return cls(
             strategy_stem=data["strategy_stem"],
             best_params=data.get("best_params", {}),

@@ -1,0 +1,222 @@
+version: 1
+cases:
+  - id: parse_search_equity
+    layer: parse
+    input: "/search RELIANCE"
+    expect:
+      kind: search
+      query: RELIANCE
+
+  - id: parse_analyze_equity
+    layer: parse
+    input: "/analyze RELIANCE"
+    expect:
+      kind: analyze
+      symbol: RELIANCE
+      timeframe: 5m
+      days: 30
+
+  - id: parse_analyze_future
+    layer: parse
+    input: "/analyze RELIANCE FUT 15m 20d"
+    expect:
+      kind: analyze
+      symbol: RELIANCE.FUT
+      timeframe: 15m
+      days: 20
+
+  - id: parse_analyze_option
+    layer: parse
+    input: "/analyze NIFTY CE 25000 28MAY2026"
+    expect:
+      kind: analyze
+      symbol: NIFTY.OPT.CE.25000.28MAY2026
+
+  - id: parse_help
+    layer: parse
+    input: "/help"
+    expect:
+      kind: help
+
+  - id: parse_empty_help
+    layer: parse
+    input: ""
+    expect:
+      kind: help
+
+  - id: parse_unknown
+    layer: parse
+    input: "what is the weather"
+    expect:
+      kind: unknown
+
+  - id: tool_search_equity
+    layer: tool
+    input: "/search RELIANCE"
+    expect:
+      tool: search_instruments
+      ok: true
+      hit_symbols:
+        - RELIANCE.NS
+
+  - id: tool_search_empty
+    layer: tool
+    input: "/search"
+    expect:
+      tool: search_instruments
+      ok: false
+      error_code: invalid_request
+
+  - id: tool_analyze_equity
+    layer: tool
+    input: "/analyze RELIANCE"
+    expect:
+      tool: analyze_instrument
+      ok: true
+      resolved_symbol: RELIANCE.NS
+      segment_contains: EQUITY
+      decision_action: BUY
+
+  - id: tool_analyze_future
+    layer: tool
+    input: "/analyze RELIANCE FUT 15m 20d"
+    expect:
+      tool: analyze_instrument
+      ok: true
+      resolved_symbol: RELIANCE.FUT
+      segment_contains: FUTURE
+      decision_action: SELL
+
+  - id: tool_analyze_option
+    layer: tool
+    input: "/analyze NIFTY CE 25000 28MAY2026"
+    expect:
+      tool: analyze_instrument
+      ok: true
+      resolved_symbol: NIFTY.OPT.CE.25000.28MAY2026
+      segment_contains: OPTION
+      decision_action: DO_NOT_ENTER
+
+  - id: tool_analyze_empty
+    layer: tool
+    input: "/analyze"
+    expect:
+      tool: analyze_instrument
+      ok: false
+      error_code: invalid_request
+
+  - id: tool_analyze_unresolved
+    layer: tool
+    input: "/analyze UNKNOWNXYZ"
+    expect:
+      tool: analyze_instrument
+      ok: false
+      error_code: resolve_failed
+
+  - id: assistant_search_equity
+    layer: assistant
+    input: "/search RELIANCE"
+    expect:
+      text_contains:
+        - RELIANCE.NS
+        - "[EQUITY]"
+
+  - id: assistant_analyze_equity
+    layer: assistant
+    input: "/analyze RELIANCE"
+    expect:
+      text_contains:
+        - "Fortuna analysis: RELIANCE.NS"
+        - "Decision: BUY"
+        - "Advisory only"
+
+  - id: assistant_unknown
+    layer: assistant
+    input: "what is the weather"
+    expect:
+      text_contains:
+        - "clearer instrument request"
+        - "/search"
+
+  - id: route_search_equity
+    layer: route
+    input: "/search RELIANCE"
+    expect:
+      route_action: search
+
+  - id: route_analyze_equity
+    layer: route
+    input: "/analyze RELIANCE"
+    expect:
+      route_action: analyze
+
+  - id: route_search_empty
+    layer: route
+    input: "/search"
+    expect:
+      route_action: clarify
+      clarification: empty_search_query
+
+  - id: route_analyze_empty
+    layer: route
+    input: "/analyze"
+    expect:
+      route_action: clarify
+      clarification: empty_analyze_symbol
+
+  - id: route_analyze_timeframe_only
+    layer: route
+    input: "/analyze 15m"
+    expect:
+      route_action: clarify
+      clarification: empty_analyze_symbol
+
+  - id: route_help
+    layer: route
+    input: "/help"
+    expect:
+      route_action: show_help
+
+  - id: route_unknown
+    layer: route
+    input: "what is the weather"
+    expect:
+      route_action: unsupported
+
+  - id: assistant_analyze_empty
+    layer: assistant
+    input: "/analyze"
+    expect:
+      text_contains:
+        - "Analyze needs a symbol"
+        - "/analyze RELIANCE"
+
+  - id: route_analyze_incomplete_option
+    layer: route
+    input: "/analyze NIFTY CE 25000"
+    expect:
+      route_action: clarify
+      clarification: incomplete_option_syntax
+
+  - id: assistant_analyze_incomplete_option
+    layer: assistant
+    input: "/analyze NIFTY CE 25000"
+    expect:
+      text_contains:
+        - "CE"
+        - "28MAY2026"
+
+  - id: assistant_analyze_unresolved
+    layer: assistant
+    input: "/analyze UNKNOWNXYZ"
+    expect:
+      text_contains:
+        - "/search"
+
+  - id: assistant_help
+    layer: assistant
+    input: "/help"
+    expect:
+      text_contains:
+        - "Fortuna Telegram assistant"
+        - "/search RELIANCE"

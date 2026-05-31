@@ -21,6 +21,23 @@ _TIMEFRAME_MINUTES = {
 }
 
 
+def bucket_start_for(timeframe: str, ts: pd.Timestamp) -> pd.Timestamp:
+    """IST wall-clock start of the OHLCV bucket that contains ``ts`` (tz-naive)."""
+    minutes = _TIMEFRAME_MINUTES.get(timeframe)
+    if minutes is None:
+        raise ValueError(f"Unsupported bar timeframe: {timeframe}")
+    ts = pd.Timestamp(ts)
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert(_IST).tz_localize(None)
+    minute = (ts.minute // minutes) * minutes
+    return ts.replace(minute=minute, second=0, microsecond=0, nanosecond=0)
+
+
+def current_bucket_start(timeframe: str) -> pd.Timestamp:
+    """IST bucket start for the current wall-clock minute (tz-naive)."""
+    return bucket_start_for(timeframe, pd.Timestamp.now(tz=_IST))
+
+
 @dataclass
 class OhlcvBar:
     """Single completed OHLCV bar."""
@@ -66,11 +83,14 @@ class BarAggregator:
         self._on_tick = callback
 
     def _bucket_start(self, ts: pd.Timestamp) -> pd.Timestamp:
-        ts = ts.tz_convert(_IST) if ts.tzinfo else ts.tz_localize(_IST)
-        minute = (ts.minute // self._minutes) * self._minutes
-        return ts.replace(minute=minute, second=0, microsecond=0, nanosecond=0)
+        return bucket_start_for(self.timeframe, ts)
 
     def _extract_ts(self, tick: dict) -> pd.Timestamp:
+        """Tick time for bucketing.
+
+        Uses SmartAPI ``exchange_timestamp`` when present; otherwise uses
+        wall-clock IST.
+        """
         if "exchange_timestamp" in tick and tick["exchange_timestamp"]:
             raw = tick["exchange_timestamp"]
             if raw > 10_000_000_000:

@@ -109,6 +109,7 @@ def _build_stream_markers(state, strategy_name: str) -> list[dict]:
     strategy, using the same conventions as the static renderer so the
     look stays consistent between initial paint and live updates."""
     import pandas as pd
+
     from fortuna.app.lightweight_chart import ist_unix_seconds
 
     if not state or not getattr(state, "batch", None):
@@ -185,12 +186,22 @@ def get_stream_port() -> int:
         if df is None or df.empty:
             return {"bars": [], "markers": [], "overlays": [], "last": 0}
 
+        closed = state.ohlcv
+        max_closed_unix = (
+            ist_unix_seconds(pd.Timestamp(closed.index[-1]))
+            if closed is not None and not closed.empty
+            else 0
+        )
+
         tail = df.tail(60)
         cutoff = int(since)
         bars: list[dict] = []
         for ts, row in tail.iterrows():
             t = ist_unix_seconds(pd.Timestamp(ts))
             if t < cutoff:
+                continue
+            # Never stream a bar older than the last closed candle (stale forming bucket).
+            if max_closed_unix and t < max_closed_unix:
                 continue
             bars.append({
                 "time": t,
@@ -487,8 +498,17 @@ def main() -> None:
     render_strategy_comparison_grid(batch)
     render_live_signal_panel(live_signals, winner=winner)
 
-    tab_chart, tab_board, tab_report, tab_detail = st.tabs(
-        ["📈 Chart", "🏆 Leaderboard", "📊 Performance", "🔬 Strategy detail"]
+    tab_chart, tab_board, tab_report, tab_detail, tab_rl, tab_assist, tab_exec, tab_monitor = st.tabs(
+        [
+            "📈 Chart",
+            "🏆 Leaderboard",
+            "📊 Performance",
+            "🔬 Strategy detail",
+            "🤖 Models",
+            "🧠 Assistant",
+            "💼 Execution",
+            "🛰️ Monitor",
+        ]
     )
 
     strategy_names = sorted(batch.results.keys())
@@ -512,6 +532,8 @@ def main() -> None:
             key="chart_strat",
             label_visibility="collapsed",
         )
+        import streamlit.components.v1 as components
+
         from fortuna.app.lightweight_chart import (
             build_lightweight_charts_spec,
             render_lightweight_charts_html,
@@ -519,7 +541,6 @@ def main() -> None:
         from fortuna.reporting.strategy_tester.chart_viewport import (
             visible_bars_for_timeframe,
         )
-        import streamlit.components.v1 as components
 
         render_live_signal_banner(live_signals.get(strat), strat, state.timeframe)
         vb = visible_bars_for_timeframe(state.timeframe)
@@ -615,6 +636,740 @@ def main() -> None:
             render_strategy_report_card(run.report)
             with st.expander("Raw JSON summary"):
                 st.json(run.report.summary_dict())
+
+    with tab_rl:
+        _render_models_panel(engine, live_signals)
+
+    with tab_assist:
+        _render_assistant_panel(engine)
+
+    with tab_exec:
+        _render_execution_panel(engine)
+
+    with tab_monitor:
+        _render_monitor_panel(engine)
+
+
+def _render_assistant_panel(engine) -> None:
+    st.subheader("Agentic assistant")
+    adapter_enabled = bool(getattr(engine.settings, "conversational_adapter_enabled", False))
+    if adapter_enabled:
+        st.caption(
+            "Conversational adapter is enabled. Free-form prompts are normalized into "
+            "typed advisory tool calls with safe fallback behavior."
+        )
+    else:
+        st.caption(
+            "Conversational adapter is disabled. The assistant still supports explicit "
+            "commands such as /search and /analyze."
+        )
+
+    examples = (
+        "/search RELIANCE",
+        "/analyze RELIANCE",
+        "/analyze RELIANCE FUT",
+        "How is Reliance looking on 15m for 20d?",
+        "Should I enter NIFTY CE 25000 28MAY2026?",
+    )
+    st.write("Examples:")
+    for ex in examples:
+        st.code(ex, language="text")
+
+    if "assistant_history" not in st.session_state:
+        st.session_state.assistant_history = []
+
+    assistant = engine.conversational_assistant()
+    prompt = st.chat_input("Ask Fortuna about a stock, future, or option contract")
+    if prompt:
+        result = assistant.handle_interaction(prompt)
+        st.session_state.assistant_history.append({"role": "user", "content": prompt})
+        st.session_state.assistant_history.append(
+            {
+                "role": "assistant",
+                "content": result.reply,
+                "meta": {
+                    "source": result.source,
+                    "confidence": result.source_confidence,
+                    "tool": result.tool or "",
+                    "rationale": result.source_rationale,
+                },
+            }
+        )
+        max_pairs = max(2, int(getattr(engine.settings, "conversational_max_history", 12)))
+        st.session_state.assistant_history = st.session_state.assistant_history[-(max_pairs * 2) :]
+
+    for item in st.session_state.assistant_history:
+        with st.chat_message(item["role"]):
+            st.write(item["content"])
+            meta = item.get("meta") or {}
+            if meta:
+                st.caption(
+                    f"source={meta.get('source', '')} · "
+                    f"confidence={float(meta.get('confidence', 0.0)):.2f} · "
+                    f"tool={meta.get('tool', '')}"
+                )
+
+
+def _render_execution_panel(engine) -> None:
+    """Live positions table + intraday equity curve + risk-budget gauges."""
+    if not getattr(engine, "execution_enabled", False):
+        st.info(
+            "Live execution is **disabled**. Set `FORTUNA_EXECUTION_ENABLED=1` "
+            "in `.env` (or `execution.enabled: true` in `configs/default.yaml`) "
+            "and reload the dashboard to activate the paper broker."
+        )
+        return
+
+    router = engine.execution_router
+    account = engine.live_account
+    if router is None or account is None:
+        st.warning("Execution router failed to initialize. Check logs/execution/.")
+        return
+
+    summary = account.to_summary()
+    cfg = router.config
+
+    cols = st.columns(5)
+    cols[0].metric("Equity", f"{summary['equity']:,.0f}", f"{summary['realized_pnl']:+,.2f}")
+    cols[1].metric("Unrealized", f"{summary['unrealized_pnl']:+,.2f}")
+    cols[2].metric("Open positions", summary["open_positions"])
+    cols[3].metric("Trades", f"{summary['total_trades']} ({summary['win_rate_pct']:.1f}%)")
+    halted = router.risk_gate.is_halted
+    cols[4].metric(
+        "Status",
+        "HALTED" if halted else "LIVE",
+        delta=f"DD {summary['max_drawdown_pct']:.2f}%",
+        delta_color="inverse" if halted else "normal",
+    )
+    if halted:
+        st.error(f"Circuit breaker: {router.risk_gate.halted_reason}")
+
+    _render_broker_sync_block(engine)
+    _render_what_to_do_now(engine)
+
+    pos_cols = st.columns([1, 1])
+    pos_cols[0].subheader("Open positions")
+    if not account.positions:
+        pos_cols[0].caption("No open positions.")
+    else:
+        rows = []
+        for sym, pos in account.positions.items():
+            mark = pos.last_mtm_price or pos.avg_price
+            rows.append({
+                "symbol": sym,
+                "side": pos.side.value,
+                "qty": pos.qty,
+                "avg": round(pos.avg_price, 2),
+                "mark": round(mark, 2),
+                "MTM": round(pos.unrealized_pnl(mark), 2),
+                "tag": pos.entry_tag or "",
+            })
+        pos_cols[0].dataframe(rows, use_container_width=True, hide_index=True)
+
+    pos_cols[1].subheader("Risk budget")
+    cap = cfg.gross_exposure_cap_pct / 100.0 * cfg.init_cash
+    used = summary["gross_exposure"]
+    pos_cols[1].progress(min(1.0, used / cap if cap > 0 else 0.0), text=f"Gross exposure {used:,.0f} / {cap:,.0f}")
+    loss_used_pct = summary["max_drawdown_pct"]
+    pos_cols[1].progress(
+        min(1.0, loss_used_pct / cfg.daily_loss_halt_pct if cfg.daily_loss_halt_pct > 0 else 0.0),
+        text=f"Daily DD {loss_used_pct:.2f}% / {cfg.daily_loss_halt_pct:.2f}%",
+    )
+
+    st.subheader("Intraday equity curve")
+    eq = account.equity_curve
+    if not eq:
+        st.caption("No equity samples yet (router hasn't seen a bar close).")
+    else:
+        import pandas as pd_local
+        eq_df = pd_local.DataFrame(
+            [{"ts": p.ts, "equity": p.equity, "drawdown_pct": p.drawdown_pct} for p in eq]
+        ).set_index("ts")
+        st.line_chart(eq_df["equity"])
+
+    st.subheader("Today's trade ledger")
+    trades = list(account.trades)
+    if not trades:
+        st.caption("No closed trades yet.")
+    else:
+        trade_rows = []
+        for t in trades:
+            trade_rows.append({
+                "symbol": t.symbol,
+                "side": t.side.value,
+                "qty": t.qty,
+                "entry": round(t.entry_price, 2),
+                "exit": round(t.exit_price, 2),
+                "net P&L": round(t.net_pnl, 2),
+                "return %": round(t.return_pct, 2),
+                "tag": t.tag or "",
+            })
+        st.dataframe(trade_rows, use_container_width=True, hide_index=True)
+
+    _render_holdings_block(engine)
+    _render_reconciliation_block(engine)
+
+
+def _render_broker_sync_block(engine) -> None:
+    """Show broker-sync status + a Sync now button (Phase 1)."""
+    if not getattr(engine, "account_sync_enabled", False):
+        with st.expander("🔌 Sync portfolio from Angel One (disabled)", expanded=False):
+            err = getattr(engine, "account_sync_error", None)
+            if err:
+                st.warning(f"Account sync disabled: {err}")
+            else:
+                st.caption(
+                    "Set `FORTUNA_EXECUTION_ACCOUNT_SYNC=1` in `.env` to mirror "
+                    "your real Angel One cash + positions + holdings into the paper "
+                    "simulator. Read-only — no orders are placed."
+                )
+        return
+
+    snap = engine.broker_snapshot
+    cols = st.columns([3, 1])
+    if snap is None:
+        cols[0].caption("Broker sync enabled — no snapshot yet.")
+    else:
+        funds = snap.funds
+        cols[0].markdown(
+            f"**Broker:** Angel One &nbsp;|&nbsp; **Net:** ₹{funds.net:,.0f} &nbsp;|&nbsp; "
+            f"**Available:** ₹{funds.available_cash:,.0f} &nbsp;|&nbsp; "
+            f"**Used margin:** ₹{funds.used_margin:,.0f} &nbsp;|&nbsp; "
+            f"**Synced:** {snap.taken_at:%Y-%m-%d %H:%M:%S}"
+        )
+        if snap.errors:
+            cols[0].caption(f"Partial sync (errors: {', '.join(snap.errors)})")
+    if cols[1].button("Sync now"):
+        applied = engine.sync_account_from_broker()
+        if applied is None:
+            st.warning(engine.account_sync_error or "Account sync failed.")
+        else:
+            st.success(
+                f"Synced — cash ₹{applied['init_cash_after']:,.0f}, "
+                f"{applied['positions_added']} positions, "
+                f"{applied['holdings_added']} holdings."
+            )
+            st.rerun()
+
+
+def _render_what_to_do_now(engine) -> None:
+    """Join real positions + holdings with agentic Fortuna decisions."""
+    account = engine.live_account
+    if account is None:
+        return
+    state = engine.state if hasattr(engine, "state") else None
+    focus_symbol = state.symbol if state else ""
+
+    held_symbols = list(account.positions.keys()) + [
+        s for s in account.holdings if s not in account.positions
+    ]
+    signals_by_symbol: dict[str, dict] = {}
+    if held_symbols and hasattr(engine, "live_signals_for_symbols"):
+        with st.spinner("Computing signals for your holdings…"):
+            signals_by_symbol = engine.live_signals_for_symbols(held_symbols)
+    decisions_by_symbol: dict[str, object] = {}
+    if held_symbols and hasattr(engine, "agent_decisions_for_symbols"):
+        with st.spinner("Running advisory agents for your holdings…"):
+            decisions_by_symbol = engine.agent_decisions_for_symbols(held_symbols)
+    focus_signals = engine.live_signals() if hasattr(engine, "live_signals") else {}
+    if focus_symbol:
+        signals_by_symbol.setdefault(focus_symbol, focus_signals)
+        if hasattr(engine, "agent_decisions"):
+            decisions_by_symbol.update(engine.agent_decisions())
+
+    rows: list[dict] = []
+    seen_symbols: set[str] = set()
+
+    # Real intraday positions (broker-seeded OR paper-acquired).
+    for sym, pos in account.positions.items():
+        seen_symbols.add(sym)
+        rec, drivers, confidence, risk = _decision_or_legacy_recommendation(
+            sym, "position", pos.side.value, signals_by_symbol, focus_symbol,
+            decisions_by_symbol,
+        )
+        rows.append({
+            "symbol": sym,
+            "kind": "Position",
+            "side": pos.side.value,
+            "qty": pos.qty,
+            "avg": round(pos.avg_price, 2),
+            "mark": round(pos.last_mtm_price or pos.avg_price, 2),
+            "MTM": round(pos.unrealized_pnl(pos.last_mtm_price or pos.avg_price), 2),
+            "recommendation": rec,
+            "confidence": confidence,
+            "drivers": drivers,
+            "risk": risk,
+        })
+
+    # Long-term DEMAT holdings (broker-mirrored).
+    for sym, h in account.holdings.items():
+        if sym in seen_symbols:
+            continue
+        seen_symbols.add(sym)
+        rec, drivers, confidence, risk = _decision_or_legacy_recommendation(
+            sym, "holding", "LONG", signals_by_symbol, focus_symbol,
+            decisions_by_symbol,
+        )
+        rows.append({
+            "symbol": sym,
+            "kind": "Holding",
+            "side": "LONG",
+            "qty": h.qty,
+            "avg": round(h.avg_price, 2),
+            "mark": round(h.last_price or h.avg_price, 2),
+            "MTM": round((h.last_price - h.avg_price) * h.qty, 2)
+                if h.last_price is not None else 0.0,
+            "recommendation": rec,
+            "confidence": confidence,
+            "drivers": drivers,
+            "risk": risk,
+        })
+
+    # Currently-focused symbol with no holding but with actionable signals:
+    # surface as a "Fortuna is suggesting an entry" row.
+    if focus_symbol and focus_symbol not in seen_symbols and focus_signals:
+        rec, drivers, confidence, risk = _decision_or_legacy_recommendation(
+            focus_symbol, "flat", None, signals_by_symbol, focus_symbol,
+            decisions_by_symbol,
+        )
+        if rec != "HOLD":
+            rows.append({
+                "symbol": focus_symbol,
+                "kind": "Flat",
+                "side": "—",
+                "qty": 0,
+                "avg": None,
+                "mark": None,
+                "MTM": 0.0,
+                "recommendation": rec,
+                "confidence": confidence,
+                "drivers": drivers,
+                "risk": risk,
+            })
+
+    st.subheader("🧭 What to do now")
+    if not rows:
+        st.caption(
+            "Nothing to recommend yet — open positions / holdings will appear here "
+            "with the latest Fortuna recommendation joined alongside."
+        )
+        return
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.caption(
+        "**recommendation** is produced by Fortuna's advisory agents when enabled; "
+        "otherwise the table falls back to legacy strategy-signal aggregation. "
+        "Paper learning tracks agentic decisions without placing live broker orders."
+    )
+
+
+def _decision_or_legacy_recommendation(
+    symbol,
+    kind,
+    current_side,
+    signals_by_symbol,
+    focus_symbol,
+    decisions_by_symbol,
+):
+    sym_key = symbol.upper().strip()
+    if "." not in sym_key and not sym_key.endswith("-EQ"):
+        sym_key = f"{sym_key}.NS"
+    decision = decisions_by_symbol.get(sym_key) or decisions_by_symbol.get(symbol)
+    if decision is not None:
+        action_obj = getattr(decision, "action", "HOLD")
+        action = getattr(action_obj, "value", None) or str(action_obj)
+        confidence = getattr(decision, "confidence", 0.0)
+        rationale = getattr(decision, "rationale", None)
+        reasons = getattr(rationale, "reasons", []) if rationale is not None else []
+        risk_notes = getattr(rationale, "risk_notes", []) if rationale is not None else []
+        drivers = "; ".join(reasons[:3])
+        risk = "; ".join(risk_notes[:2])
+        return (action, drivers, f"{confidence * 100:.0f}%", risk)
+    rec, drivers = _recommendation_for(
+        symbol, kind, current_side, signals_by_symbol, focus_symbol,
+    )
+    return (rec, drivers, "", "")
+
+
+def _recommendation_for(symbol, kind, current_side, signals_by_symbol, focus_symbol):
+    """Aggregate per-strategy signals into a single recommendation for a symbol."""
+    sym_key = symbol.upper().strip()
+    if "." not in sym_key and not sym_key.endswith("-EQ"):
+        sym_key = f"{sym_key}.NS"
+    signals = signals_by_symbol.get(sym_key) or signals_by_symbol.get(symbol) or {}
+    if not signals:
+        return ("HOLD (loading…)", "")
+
+    actions: list[tuple[str, str]] = []
+    for strat_name, sig in signals.items():
+        action = sig.action
+        if action in {"BUY", "SELL", "EXIT_LONG", "EXIT_SHORT"}:
+            actions.append((action, strat_name))
+
+    if not actions:
+        return ("HOLD", "")
+
+    if current_side in {"LONG", "long"} or kind == "holding":
+        exits = [s for a, s in actions if a == "EXIT_LONG"]
+        if exits:
+            return ("EXIT_LONG", ", ".join(sorted(set(exits))))
+        return ("HOLD", "no exit yet")
+    if current_side in {"SHORT", "short"}:
+        exits = [s for a, s in actions if a == "EXIT_SHORT"]
+        if exits:
+            return ("EXIT_SHORT", ", ".join(sorted(set(exits))))
+        return ("HOLD", "no exit yet")
+
+    # Flat → look for BUY / SELL agreement
+    buys = [s for a, s in actions if a == "BUY"]
+    sells = [s for a, s in actions if a == "SELL"]
+    if len(buys) >= len(sells) and buys:
+        return ("BUY", ", ".join(sorted(set(buys))))
+    if sells:
+        return ("SELL_SHORT", ", ".join(sorted(set(sells))))
+    return ("HOLD", "")
+
+
+def _render_holdings_block(engine) -> None:
+    """Phase 1: list long-term DEMAT holdings mirrored from the broker."""
+    account = engine.live_account
+    if account is None or not account.holdings:
+        return
+    st.subheader("Long-term holdings (mirrored from Angel One)")
+    rows = []
+    for sym, h in account.holdings.items():
+        mv = h.market_value()
+        rows.append({
+            "symbol": sym,
+            "tradingsymbol": h.tradingsymbol,
+            "qty": h.qty,
+            "avg": round(h.avg_price, 2),
+            "ltp": round(h.last_price, 2) if h.last_price is not None else None,
+            "market value": round(mv, 2),
+            "P&L": round(h.pnl, 2) if h.pnl is not None else None,
+        })
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _render_reconciliation_block(engine) -> None:
+    """Phase 2: paper-vs-real reconciliation rendered inline."""
+    if not getattr(engine, "account_sync_enabled", False):
+        return
+    st.subheader("🪞 Reconciliation (paper vs broker)")
+    if st.button("Run reconciliation now"):
+        report = engine.run_reconciliation()
+        if report is None:
+            st.warning("Reconciliation unavailable — check sync status.")
+            return
+        st.session_state["__fortuna_reco"] = report
+    report = st.session_state.get("__fortuna_reco")
+    if report is None:
+        st.caption("Click **Run reconciliation now** to compare Fortuna's paper journal against your real Angel One trade book for today.")
+        return
+    s = report.to_dict()
+    cols = st.columns(5)
+    cols[0].metric("Paper fills", s["paper_fills"])
+    cols[1].metric("Real fills", s["real_fills"])
+    cols[2].metric("Matched", s["matched"])
+    cols[3].metric("Coverage %", f"{s['coverage_pct']:.2f}")
+    cols[4].metric("Avg slippage %", f"{s['avg_slippage_pct']:+.4f}")
+
+    if report.matched:
+        st.markdown("**Matched**")
+        st.dataframe([
+            {
+                "symbol": m.symbol,
+                "side": m.side.value,
+                "qty": m.qty,
+                "paper px": round(m.paper_price, 2),
+                "real px": round(m.real_price, 2),
+                "slippage %": round(m.slippage_pct, 4),
+                "strategy": m.strategy or "",
+            }
+            for m in report.matched
+        ], use_container_width=True, hide_index=True)
+    if report.paper_only:
+        st.markdown("**Paper-only (you missed these)**")
+        st.dataframe([
+            {
+                "symbol": p.symbol,
+                "side": p.side.value,
+                "qty": p.qty,
+                "paper px": round(p.fill_price, 2),
+                "strategy": p.strategy or "",
+                "ts": p.fill_ts.strftime("%H:%M:%S") if p.fill_ts else "",
+            }
+            for p in report.paper_only
+        ], use_container_width=True, hide_index=True)
+    if report.real_only:
+        st.markdown("**Real-only (manual, no Fortuna recommendation)**")
+        st.dataframe([
+            {
+                "symbol": rt.fortuna_symbol or rt.tradingsymbol,
+                "txn": rt.transaction_type,
+                "qty": rt.quantity,
+                "real px": round(rt.fill_price, 2),
+                "product": rt.producttype or "",
+                "ts": rt.fill_time.strftime("%H:%M:%S") if rt.fill_time else "",
+            }
+            for rt in report.real_only
+        ], use_container_width=True, hide_index=True)
+
+
+def _render_monitor_panel(engine) -> None:
+    """Live event feed; filter by severity / event_type / symbol / strategy."""
+    if not getattr(engine, "execution_enabled", False):
+        st.info("Enable execution to populate the monitor feed (see Execution tab).")
+        return
+    monitor = engine.execution_monitor
+    if monitor is None:
+        st.warning("Execution monitor unavailable.")
+        return
+
+    events = monitor.snapshot()
+    if not events:
+        st.caption("No events yet.")
+        return
+
+    severities = sorted({e.severity.value for e in events})
+    event_types = sorted({e.event_type for e in events})
+
+    cols = st.columns(3)
+    sel_sev = cols[0].multiselect("Severity", severities, default=severities)
+    sel_type = cols[1].multiselect("Event type", event_types, default=event_types)
+    limit = cols[2].selectbox("Show", [50, 100, 250, 500, len(events)], index=1)
+
+    rows = []
+    for evt in reversed(events):
+        if evt.severity.value not in sel_sev:
+            continue
+        if evt.event_type not in sel_type:
+            continue
+        rows.append({
+            "ts": evt.ts.strftime("%H:%M:%S"),
+            "severity": evt.severity.value,
+            "event": evt.event_type,
+            "symbol": evt.symbol or "",
+            "strategy": evt.strategy or "",
+            "message": evt.message,
+        })
+        if len(rows) >= int(limit):
+            break
+
+    if not rows:
+        st.caption("No events match the current filter.")
+        return
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    stats = getattr(engine.execution_router, "stats", None)
+    if stats is not None:
+        st.divider()
+        cols = st.columns(4)
+        cols[0].metric("Bars processed", stats.bars_processed)
+        cols[1].metric("Signals seen", stats.signals_seen)
+        cols[2].metric("Orders placed", stats.orders_placed)
+        cols[3].metric("Risk blocks", stats.risk_blocks)
+        cols = st.columns(4)
+        cols[0].metric("Fills", stats.fills)
+        cols[1].metric("RL suppressed", stats.rl_suppressed)
+        cols[2].metric("Cooldown skips", stats.cooldown_skips)
+        cols[3].metric("Breaker trips", stats.circuit_breaker_trips)
+
+
+def _render_models_panel(engine, live_signals) -> None:
+    """RL, ML, regime, and recent agentic decision status."""
+    status = {}
+    try:
+        status = engine.model_status().to_dict()
+    except Exception:  # noqa: BLE001
+        status = {}
+
+    _render_registry_panel(status)
+    st.divider()
+    _render_rl_panel(engine, live_signals, rl_status=status.get("rl") or {})
+    st.divider()
+    _render_ml_panel(engine, ml_status=status.get("ml") or {})
+    st.divider()
+    _render_regime_panel(status.get("regime") or {})
+    st.divider()
+    _render_agentic_log_panel(status.get("agentic") or {})
+
+
+def _render_registry_panel(status: dict) -> None:
+    st.subheader("Promotion registry")
+    registry_enabled = bool(status.get("registry_enabled"))
+    promotion_required = bool(status.get("promotion_required"))
+    cols = st.columns(3)
+    cols[0].metric("Registry enabled", "yes" if registry_enabled else "no")
+    cols[1].metric("Promotion required", "yes" if promotion_required else "no")
+    cols[2].metric(
+        "Fallback mode",
+        "pointer-only" if (registry_enabled and promotion_required) else "legacy/dev",
+    )
+    if registry_enabled and promotion_required:
+        st.caption(
+            "Missing live pointers keep the affected ML/RL path out of advisory, while deterministic signals continue."
+        )
+    else:
+        st.caption(
+            "Registry is relaxed or disabled, so dev-time fallback loading may still be used."
+        )
+
+
+def _render_ml_panel(engine, *, ml_status: dict) -> None:
+    cols = st.columns([3, 1])
+    cols[0].subheader("ML signal scorer")
+    if cols[1].button("Reload ML scorer", key="reload_ml_scorer"):
+        ok = engine.reload_ml_scorer()
+        if ok:
+            st.success("ML scorer reloaded.")
+            st.rerun()
+        else:
+            st.warning("No ML scorer available — agentic runs without ML votes.")
+
+    if not ml_status.get("enabled"):
+        st.info("ML scorer disabled (`FORTUNA_AGENTIC_ML_SCORER_ENABLED=0`).")
+        return
+    if not ml_status.get("available"):
+        st.info(
+            "No promoted ML scorer loaded. Train and promote via "
+            "`uv run python scripts/promote_model.py --kind ml_scorer --run-id <id>`."
+        )
+        if ml_status.get("live_pointer"):
+            st.caption(f"Live pointer: `{ml_status['live_pointer']}`")
+        if ml_status.get("artifact_dir"):
+            st.caption(f"Artifact dir: `{ml_status['artifact_dir']}`")
+        if ml_status.get("last_promotion"):
+            _render_promotion_caption(ml_status["last_promotion"])
+        return
+
+    st.markdown(
+        f"**Run ID:** `{ml_status.get('run_id', '—')}` &nbsp;|&nbsp; "
+        f"**Verdict:** `{'PASS' if ml_status.get('verdict_passed') else 'FAIL'}` &nbsp;|&nbsp; "
+        f"**Advisory ready:** `{ml_status.get('advisory_ready', False)}`"
+    )
+    m1, m2, m3 = st.columns(3)
+    m1.metric("OOS precision", f"{float(ml_status.get('oos_precision', 0)):.3f}")
+    m2.metric("OOS ROC-AUC", f"{float(ml_status.get('oos_roc_auc', 0)):.3f}")
+    m3.metric("Schema hash", (ml_status.get("feature_schema_hash") or "—")[:12])
+    if ml_status.get("live_pointer"):
+        st.caption(f"Live pointer: `{ml_status['live_pointer']}`")
+    if ml_status.get("artifact_dir"):
+        st.caption(f"Artifact dir: `{ml_status['artifact_dir']}`")
+    if ml_status.get("last_promotion"):
+        _render_promotion_caption(ml_status["last_promotion"])
+
+
+def _render_regime_panel(regime_status: dict) -> None:
+    st.subheader("Regime detector")
+    if regime_status.get("available"):
+        st.success(f"Available at `{regime_status.get('path', '—')}`")
+    else:
+        st.info("Regime classifier not found — RL uses default policy routing.")
+
+
+def _render_agentic_log_panel(agentic_status: dict) -> None:
+    st.subheader("Recent agentic decisions")
+    rows = agentic_status.get("recent_decisions") or []
+    if not rows:
+        st.info("No agentic decisions logged yet.")
+    else:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    st.divider()
+    _render_learning_summary(agentic_status.get("learning_summary") or {})
+
+
+def _render_rl_panel(engine, live_signals, *, rl_status: dict | None = None) -> None:
+    """Render the RL policy status + metadata card.
+
+    Shows a friendly empty-state when no checkpoint exists, otherwise
+    renders the OOS metrics + FilterVerdict + raw metadata.json.
+    """
+    rl_gen = getattr(engine, "rl_generator", None)
+    available = bool(rl_gen and getattr(rl_gen, "is_available", False))
+
+    cols = st.columns([3, 1])
+    cols[0].subheader("RL policy status")
+    if cols[1].button("Reload policy", key="reload_rl_policy"):
+        ok = engine.reload_rl_generator()
+        if ok:
+            st.success("RL policy reloaded.")
+            st.rerun()
+        else:
+            st.warning("No RL policy available — deterministic fallback is active.")
+
+    if rl_status and rl_status.get("live_pointer"):
+        st.caption(f"Live pointer: `{rl_status['live_pointer']}`")
+    if rl_status and rl_status.get("checkpoint_dir"):
+        st.caption(f"Checkpoint dir: `{rl_status['checkpoint_dir']}`")
+
+    if not available:
+        st.info(
+            "No validated RL checkpoint is loaded. Train one via "
+            "`uv run python scripts/run_rl_train.py` and promote it via "
+            "`uv run python scripts/promote_policy.py --run-id <id>`. "
+            "The dashboard continues to render deterministic signals."
+        )
+        if rl_status and rl_status.get("last_promotion"):
+            _render_promotion_caption(rl_status["last_promotion"])
+        return
+
+    meta = getattr(rl_gen, "metadata", None)
+    if meta is None:
+        st.warning("Policy loaded but metadata.json missing.")
+        return
+
+    badge = "PASS" if meta.verdict_passed else "FAIL"
+    ready = "yes" if getattr(meta, "advisory_ready", False) else "no"
+    st.markdown(
+        f"**Run ID:** `{meta.run_id}` &nbsp;|&nbsp; **Verdict:** `{badge}` &nbsp;|&nbsp; "
+        f"**Advisory ready:** `{ready}` &nbsp;|&nbsp; **Policy:** `{meta.policy_type}`"
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("OOS Sharpe", f"{meta.oos_metrics.sharpe_ratio:.2f}")
+    m2.metric("OOS PF", f"{meta.oos_metrics.profit_factor:.2f}")
+    m3.metric("OOS Trades", meta.oos_metrics.total_trades)
+    m4.metric("OOS MaxDD %", f"{meta.oos_metrics.max_drawdown_pct * 100:.2f}")
+    if rl_status and rl_status.get("last_promotion"):
+        _render_promotion_caption(rl_status["last_promotion"])
+
+    rl_keys = [k for k in live_signals if k.startswith("RL:")]
+    if rl_keys:
+        latest = live_signals[rl_keys[0]]
+        st.markdown(
+            f"**Latest RL signal:** `{latest.action}` at "
+            f"`{latest.bar_time}` close={latest.bar_close:.2f}"
+        )
+
+    with st.expander("metadata.json"):
+        st.json(meta.to_dict())
+
+
+def _render_learning_summary(summary: dict) -> None:
+    st.subheader("Paper-learning outcomes")
+    total = int(summary.get("total_rows", 0) or 0)
+    if total == 0:
+        st.caption("No learning rows recorded yet.")
+        return
+    cols = st.columns(4)
+    cols[0].metric("Rows", total)
+    cols[1].metric("Resolved", int(summary.get("resolved_rows", 0) or 0))
+    cols[2].metric("Paper closed", int(summary.get("paper_closed_rows", 0) or 0))
+    avg_pnl = summary.get("avg_realized_pnl_pct")
+    cols[3].metric("Avg realized %", "—" if avg_pnl is None else f"{float(avg_pnl):+.2f}")
+    recent = summary.get("recent_rows") or []
+    if recent:
+        st.dataframe(recent, use_container_width=True, hide_index=True)
+
+
+def _render_promotion_caption(promotion: dict) -> None:
+    run_id = promotion.get("run_id") or "—"
+    promoted_at = promotion.get("promoted_at") or promotion.get("ts") or "—"
+    promoted_by = promotion.get("promoted_by") or "unknown"
+    st.caption(
+        f"Last promotion: run `{run_id}` by `{promoted_by}` at `{promoted_at}`"
+    )
 
 
 if __name__ == "__main__":

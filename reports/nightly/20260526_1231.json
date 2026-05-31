@@ -1,0 +1,1478 @@
+{
+  "started_at": "2026-05-26T10:03:55",
+  "ended_at": "2026-05-26T12:31:15",
+  "total_duration_s": 8839.969222599997,
+  "basket": [
+    "INFY.NS",
+    "TCS.NS",
+    "SBIN.NS",
+    "AXISBANK.NS",
+    "BHARTIARTL.NS",
+    "LT.NS",
+    "TATASTEEL.NS",
+    "ICICIBANK.FUT",
+    "HDFCBANK.FUT",
+    "RELIANCE.FUT",
+    "INFY.FUT",
+    "TCS.FUT",
+    "SBIN.FUT",
+    "AXISBANK.FUT",
+    "BHARTIARTL.FUT",
+    "LT.FUT",
+    "TATASTEEL.FUT"
+  ],
+  "steps": [
+    {
+      "name": "backfill:INFY.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:55",
+      "ended_at": "2026-05-26T10:03:55",
+      "duration_s": 0.07529849999991711,
+      "detail": {
+        "symbol": "INFY.NS",
+        "rows": 8925,
+        "first": "2025-11-27 09:15:00",
+        "last": "2026-05-25 15:25:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:TCS.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:55",
+      "ended_at": "2026-05-26T10:03:56",
+      "duration_s": 0.019141299999319017,
+      "detail": {
+        "symbol": "TCS.NS",
+        "rows": 8925,
+        "first": "2025-11-27 09:15:00",
+        "last": "2026-05-25 15:25:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:SBIN.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:56",
+      "ended_at": "2026-05-26T10:03:56",
+      "duration_s": 0.018205400003353134,
+      "detail": {
+        "symbol": "SBIN.NS",
+        "rows": 8925,
+        "first": "2025-11-27 09:15:00",
+        "last": "2026-05-25 15:25:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:AXISBANK.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:56",
+      "ended_at": "2026-05-26T10:03:56",
+      "duration_s": 0.018843699996068608,
+      "detail": {
+        "symbol": "AXISBANK.NS",
+        "rows": 8925,
+        "first": "2025-11-27 09:15:00",
+        "last": "2026-05-25 15:25:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:BHARTIARTL.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:56",
+      "ended_at": "2026-05-26T10:03:56",
+      "duration_s": 0.018096500003593974,
+      "detail": {
+        "symbol": "BHARTIARTL.NS",
+        "rows": 8925,
+        "first": "2025-11-27 09:15:00",
+        "last": "2026-05-25 15:25:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:LT.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:56",
+      "ended_at": "2026-05-26T10:03:56",
+      "duration_s": 0.018135600003006402,
+      "detail": {
+        "symbol": "LT.NS",
+        "rows": 8925,
+        "first": "2025-11-27 09:15:00",
+        "last": "2026-05-25 15:25:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:TATASTEEL.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:56",
+      "ended_at": "2026-05-26T10:03:56",
+      "duration_s": 0.017357099997752812,
+      "detail": {
+        "symbol": "TATASTEEL.NS",
+        "rows": 8925,
+        "first": "2025-11-27 09:15:00",
+        "last": "2026-05-25 15:25:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:ICICIBANK.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:03:56",
+      "ended_at": "2026-05-26T10:04:07",
+      "duration_s": 11.74156480000238,
+      "detail": {
+        "symbol": "ICICIBANK.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:05:00",
+        "last": "2026-05-26 10:00:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:HDFCBANK.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:04:07",
+      "ended_at": "2026-05-26T10:04:14",
+      "duration_s": 6.323893900000257,
+      "detail": {
+        "symbol": "HDFCBANK.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:05:00",
+        "last": "2026-05-26 10:00:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:RELIANCE.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:04:14",
+      "ended_at": "2026-05-26T10:04:24",
+      "duration_s": 10.223535999997694,
+      "detail": {
+        "symbol": "RELIANCE.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:05:00",
+        "last": "2026-05-26 10:00:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:INFY.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:04:24",
+      "ended_at": "2026-05-26T10:04:41",
+      "duration_s": 16.984491100003652,
+      "detail": {
+        "symbol": "INFY.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:05:00",
+        "last": "2026-05-26 10:00:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:TCS.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:04:41",
+      "ended_at": "2026-05-26T10:06:14",
+      "duration_s": 92.84614010000223,
+      "detail": {
+        "symbol": "TCS.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:05:00",
+        "last": "2026-05-26 10:00:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:SBIN.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:06:14",
+      "ended_at": "2026-05-26T10:07:18",
+      "duration_s": 64.1136789000011,
+      "detail": {
+        "symbol": "SBIN.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:10:00",
+        "last": "2026-05-26 10:05:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:AXISBANK.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:07:18",
+      "ended_at": "2026-05-26T10:08:00",
+      "duration_s": 41.84539860000223,
+      "detail": {
+        "symbol": "AXISBANK.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:10:00",
+        "last": "2026-05-26 10:05:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:BHARTIARTL.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:08:00",
+      "ended_at": "2026-05-26T10:08:22",
+      "duration_s": 22.576408699998865,
+      "detail": {
+        "symbol": "BHARTIARTL.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:10:00",
+        "last": "2026-05-26 10:05:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:LT.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:08:22",
+      "ended_at": "2026-05-26T10:08:57",
+      "duration_s": 34.73108050000155,
+      "detail": {
+        "symbol": "LT.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:10:00",
+        "last": "2026-05-26 10:05:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:TATASTEEL.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T10:08:57",
+      "ended_at": "2026-05-26T10:09:15",
+      "duration_s": 18.48907429999963,
+      "detail": {
+        "symbol": "TATASTEEL.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 10:10:00",
+        "last": "2026-05-26 10:05:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "regime_detector",
+      "status": "ok",
+      "started_at": "2026-05-26T10:09:15",
+      "ended_at": "2026-05-26T10:14:00",
+      "duration_s": 284.34337049999885,
+      "detail": {
+        "sessions": 2023,
+        "accuracy": 1.0,
+        "n_train": 1618,
+        "n_test": 405,
+        "output": "models\\regime\\classifier.joblib"
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:INFY.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T10:14:00",
+      "ended_at": "2026-05-26T10:20:33",
+      "duration_s": 393.047038100005,
+      "detail": {
+        "symbol": "INFY.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_101432",
+        "passed": false,
+        "sharpe": 0.32033330704189156,
+        "pf": 1.0878967820318006,
+        "trades": 38,
+        "win_rate": 60.526315789473685,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:TCS.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T10:20:33",
+      "ended_at": "2026-05-26T10:28:42",
+      "duration_s": 489.59204039999895,
+      "detail": {
+        "symbol": "TCS.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_102107",
+        "passed": false,
+        "sharpe": -0.1975592196846859,
+        "pf": 1.0042439611813065,
+        "trades": 21,
+        "win_rate": 57.14285714285714,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:SBIN.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T10:28:42",
+      "ended_at": "2026-05-26T10:35:57",
+      "duration_s": 435.00876340000104,
+      "detail": {
+        "symbol": "SBIN.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_102915",
+        "passed": false,
+        "sharpe": 0.2870149098453605,
+        "pf": 1.0740278854075245,
+        "trades": 17,
+        "win_rate": 35.294117647058826,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:AXISBANK.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T10:35:57",
+      "ended_at": "2026-05-26T10:44:08",
+      "duration_s": 490.2966579999993,
+      "detail": {
+        "symbol": "AXISBANK.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_103630",
+        "passed": false,
+        "sharpe": -2.8904327596032062,
+        "pf": 0.6269645848390867,
+        "trades": 26,
+        "win_rate": 53.84615384615385,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:BHARTIARTL.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T10:44:08",
+      "ended_at": "2026-05-26T10:50:31",
+      "duration_s": 383.2046511000008,
+      "detail": {
+        "symbol": "BHARTIARTL.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_104440",
+        "passed": false,
+        "sharpe": -5.611955989323149,
+        "pf": 0.3551484449830753,
+        "trades": 23,
+        "win_rate": 30.434782608695656,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:LT.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T10:50:31",
+      "ended_at": "2026-05-26T10:55:51",
+      "duration_s": 319.84463069999765,
+      "detail": {
+        "symbol": "LT.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_105103",
+        "passed": true,
+        "sharpe": 3.5038894338091633,
+        "pf": 1.9588769500300036,
+        "trades": 13,
+        "win_rate": 61.53846153846154,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:TATASTEEL.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T10:55:51",
+      "ended_at": "2026-05-26T11:04:54",
+      "duration_s": 543.024605199993,
+      "detail": {
+        "symbol": "TATASTEEL.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_105623",
+        "passed": false,
+        "sharpe": -4.125426252758906,
+        "pf": 0.6122221480292321,
+        "trades": 36,
+        "win_rate": 36.11111111111111,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:ICICIBANK.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T11:04:54",
+      "ended_at": "2026-05-26T11:15:45",
+      "duration_s": 651.3886456000037,
+      "detail": {
+        "symbol": "ICICIBANK.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_110541",
+        "passed": false,
+        "sharpe": -2.688331190909625,
+        "pf": 0.8429339223226828,
+        "trades": 18,
+        "win_rate": 55.55555555555556,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:HDFCBANK.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T11:15:45",
+      "ended_at": "2026-05-26T11:25:27",
+      "duration_s": 581.9608962999991,
+      "detail": {
+        "symbol": "HDFCBANK.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_111644",
+        "passed": false,
+        "sharpe": -11.385562713139704,
+        "pf": 0.06926249822246941,
+        "trades": 8,
+        "win_rate": 12.5,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:RELIANCE.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T11:25:27",
+      "ended_at": "2026-05-26T11:34:01",
+      "duration_s": 513.8373071000024,
+      "detail": {
+        "symbol": "RELIANCE.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_112614",
+        "passed": true,
+        "sharpe": 0.9367969775737189,
+        "pf": 1.2488555075757821,
+        "trades": 24,
+        "win_rate": 45.83333333333333,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:INFY.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T11:34:01",
+      "ended_at": "2026-05-26T11:42:29",
+      "duration_s": 507.7843436000039,
+      "detail": {
+        "symbol": "INFY.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_113439",
+        "passed": false,
+        "sharpe": -1.5068776060314726,
+        "pf": 0.8637322222351327,
+        "trades": 41,
+        "win_rate": 51.21951219512195,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:TCS.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T11:42:29",
+      "ended_at": "2026-05-26T11:49:18",
+      "duration_s": 409.0217550000016,
+      "detail": {
+        "symbol": "TCS.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_114324",
+        "passed": false,
+        "sharpe": -1.6606914444693512,
+        "pf": 0.7400388632483778,
+        "trades": 29,
+        "win_rate": 48.275862068965516,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:SBIN.FUT:CnnPolicy",
+      "status": "fail",
+      "started_at": "2026-05-26T11:49:18",
+      "ended_at": "2026-05-26T11:49:49",
+      "duration_s": 30.716942600003676,
+      "detail": {},
+      "error": "RuntimeError: SmartAPI getCandleData failed for SBIN.FUT: HTTP 403 rate limit: Access denied because of exceeding access rate"
+    },
+    {
+      "name": "rl_train:AXISBANK.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T11:49:49",
+      "ended_at": "2026-05-26T11:56:49",
+      "duration_s": 420.6160577000046,
+      "detail": {
+        "symbol": "AXISBANK.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_115055",
+        "passed": false,
+        "sharpe": -6.829270043344843,
+        "pf": 0.2668549684710095,
+        "trades": 16,
+        "win_rate": 31.25,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:BHARTIARTL.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T11:56:49",
+      "ended_at": "2026-05-26T12:03:02",
+      "duration_s": 373.2098616000003,
+      "detail": {
+        "symbol": "BHARTIARTL.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_115732",
+        "passed": false,
+        "sharpe": -9.231654757501138,
+        "pf": 0.15599880884288742,
+        "trades": 13,
+        "win_rate": 15.384615384615385,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:LT.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T12:03:02",
+      "ended_at": "2026-05-26T12:08:44",
+      "duration_s": 341.58051000000705,
+      "detail": {
+        "symbol": "LT.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_120350",
+        "passed": false,
+        "sharpe": -8.542398386346473,
+        "pf": 0.18507774702153626,
+        "trades": 19,
+        "win_rate": 31.57894736842105,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:TATASTEEL.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T12:08:44",
+      "ended_at": "2026-05-26T12:17:44",
+      "duration_s": 540.1283576999995,
+      "detail": {
+        "symbol": "TATASTEEL.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_120957",
+        "passed": false,
+        "sharpe": -0.27409727213783847,
+        "pf": 1.1150346628777679,
+        "trades": 35,
+        "win_rate": 48.57142857142857,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:INFY.NS:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:17:44",
+      "ended_at": "2026-05-26T12:18:24",
+      "duration_s": 39.823291799999424,
+      "detail": {
+        "symbol": "INFY.NS",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\INFY.NS_5m_1779778064",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:INFY.NS:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:18:24",
+      "ended_at": "2026-05-26T12:18:35",
+      "duration_s": 10.820290800002113,
+      "detail": {
+        "symbol": "INFY.NS",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\INFY.NS_5m_1779778104",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TCS.NS:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:18:35",
+      "ended_at": "2026-05-26T12:19:12",
+      "duration_s": 36.997460200000205,
+      "detail": {
+        "symbol": "TCS.NS",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TCS.NS_5m_1779778115",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TCS.NS:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:19:12",
+      "ended_at": "2026-05-26T12:19:22",
+      "duration_s": 10.747823600002448,
+      "detail": {
+        "symbol": "TCS.NS",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TCS.NS_5m_1779778152",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:SBIN.NS:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:19:22",
+      "ended_at": "2026-05-26T12:19:59",
+      "duration_s": 36.838715899997624,
+      "detail": {
+        "symbol": "SBIN.NS",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\SBIN.NS_5m_1779778163",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:SBIN.NS:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:19:59",
+      "ended_at": "2026-05-26T12:20:10",
+      "duration_s": 10.58595630000491,
+      "detail": {
+        "symbol": "SBIN.NS",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\SBIN.NS_5m_1779778199",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:AXISBANK.NS:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:20:10",
+      "ended_at": "2026-05-26T12:20:47",
+      "duration_s": 37.05126589999418,
+      "detail": {
+        "symbol": "AXISBANK.NS",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\AXISBANK.NS_5m_1779778210",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:AXISBANK.NS:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:20:47",
+      "ended_at": "2026-05-26T12:20:58",
+      "duration_s": 10.62705310000456,
+      "detail": {
+        "symbol": "AXISBANK.NS",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\AXISBANK.NS_5m_1779778247",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:BHARTIARTL.NS:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:20:58",
+      "ended_at": "2026-05-26T12:21:35",
+      "duration_s": 37.077904099998705,
+      "detail": {
+        "symbol": "BHARTIARTL.NS",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\BHARTIARTL.NS_5m_1779778258",
+        "competitors": 11,
+        "champion": "orb_15m",
+        "champ_profit_pct": 3.996009019778324,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:BHARTIARTL.NS:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:21:35",
+      "ended_at": "2026-05-26T12:21:45",
+      "duration_s": 10.6588339000009,
+      "detail": {
+        "symbol": "BHARTIARTL.NS",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\BHARTIARTL.NS_5m_1779778295",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:LT.NS:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:21:45",
+      "ended_at": "2026-05-26T12:22:22",
+      "duration_s": 37.0907933999988,
+      "detail": {
+        "symbol": "LT.NS",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\LT.NS_5m_1779778305",
+        "competitors": 11,
+        "champion": "orb_15m",
+        "champ_profit_pct": 7.606912914030506,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:LT.NS:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:22:22",
+      "ended_at": "2026-05-26T12:22:33",
+      "duration_s": 10.604749700003595,
+      "detail": {
+        "symbol": "LT.NS",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\LT.NS_5m_1779778342",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TATASTEEL.NS:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:22:33",
+      "ended_at": "2026-05-26T12:23:10",
+      "duration_s": 36.78136800000357,
+      "detail": {
+        "symbol": "TATASTEEL.NS",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TATASTEEL.NS_5m_1779778353",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TATASTEEL.NS:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:23:10",
+      "ended_at": "2026-05-26T12:23:20",
+      "duration_s": 10.691068000000087,
+      "detail": {
+        "symbol": "TATASTEEL.NS",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TATASTEEL.NS_5m_1779778390",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:ICICIBANK.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:23:20",
+      "ended_at": "2026-05-26T12:23:58",
+      "duration_s": 37.19451290000143,
+      "detail": {
+        "symbol": "ICICIBANK.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\ICICIBANK.FUT_5m_1779778401",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:ICICIBANK.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:23:58",
+      "ended_at": "2026-05-26T12:24:08",
+      "duration_s": 10.665552200000093,
+      "detail": {
+        "symbol": "ICICIBANK.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\ICICIBANK.FUT_5m_1779778438",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:HDFCBANK.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:24:08",
+      "ended_at": "2026-05-26T12:24:45",
+      "duration_s": 36.69349720000173,
+      "detail": {
+        "symbol": "HDFCBANK.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\HDFCBANK.FUT_5m_1779778448",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:HDFCBANK.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:24:45",
+      "ended_at": "2026-05-26T12:24:56",
+      "duration_s": 10.603516299997864,
+      "detail": {
+        "symbol": "HDFCBANK.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\HDFCBANK.FUT_5m_1779778485",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:RELIANCE.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:24:56",
+      "ended_at": "2026-05-26T12:25:33",
+      "duration_s": 36.88091269999859,
+      "detail": {
+        "symbol": "RELIANCE.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\RELIANCE.FUT_5m_1779778496",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:RELIANCE.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:25:33",
+      "ended_at": "2026-05-26T12:25:43",
+      "duration_s": 10.627360200000112,
+      "detail": {
+        "symbol": "RELIANCE.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\RELIANCE.FUT_5m_1779778533",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:INFY.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:25:43",
+      "ended_at": "2026-05-26T12:26:20",
+      "duration_s": 37.06531570000516,
+      "detail": {
+        "symbol": "INFY.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\INFY.FUT_5m_1779778543",
+        "competitors": 11,
+        "champion": "ivorb_5m",
+        "champ_profit_pct": 1.0403204947867062,
+        "champ_win_pct": 100.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:INFY.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:26:20",
+      "ended_at": "2026-05-26T12:26:31",
+      "duration_s": 10.598345799997333,
+      "detail": {
+        "symbol": "INFY.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\INFY.FUT_5m_1779778580",
+        "competitors": 3,
+        "champion": "ivorb",
+        "champ_profit_pct": 1.0403204947867062,
+        "champ_win_pct": 100.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TCS.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:26:31",
+      "ended_at": "2026-05-26T12:27:08",
+      "duration_s": 36.845287399999506,
+      "detail": {
+        "symbol": "TCS.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TCS.FUT_5m_1779778591",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TCS.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:27:08",
+      "ended_at": "2026-05-26T12:27:18",
+      "duration_s": 10.57478319999791,
+      "detail": {
+        "symbol": "TCS.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TCS.FUT_5m_1779778628",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:SBIN.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:27:18",
+      "ended_at": "2026-05-26T12:27:55",
+      "duration_s": 36.67247930000303,
+      "detail": {
+        "symbol": "SBIN.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\SBIN.FUT_5m_1779778638",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:SBIN.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:27:55",
+      "ended_at": "2026-05-26T12:28:06",
+      "duration_s": 10.629293800004234,
+      "detail": {
+        "symbol": "SBIN.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\SBIN.FUT_5m_1779778675",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:AXISBANK.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:28:06",
+      "ended_at": "2026-05-26T12:28:42",
+      "duration_s": 36.924541500004125,
+      "detail": {
+        "symbol": "AXISBANK.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\AXISBANK.FUT_5m_1779778686",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:AXISBANK.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:28:42",
+      "ended_at": "2026-05-26T12:28:53",
+      "duration_s": 10.619409500002803,
+      "detail": {
+        "symbol": "AXISBANK.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\AXISBANK.FUT_5m_1779778723",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:BHARTIARTL.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:28:53",
+      "ended_at": "2026-05-26T12:29:30",
+      "duration_s": 36.85690220000106,
+      "detail": {
+        "symbol": "BHARTIARTL.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\BHARTIARTL.FUT_5m_1779778733",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:BHARTIARTL.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:29:30",
+      "ended_at": "2026-05-26T12:29:40",
+      "duration_s": 10.553299200000765,
+      "detail": {
+        "symbol": "BHARTIARTL.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\BHARTIARTL.FUT_5m_1779778770",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:LT.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:29:40",
+      "ended_at": "2026-05-26T12:30:17",
+      "duration_s": 36.58136569999624,
+      "detail": {
+        "symbol": "LT.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\LT.FUT_5m_1779778781",
+        "competitors": 11,
+        "champion": "orb_15m",
+        "champ_profit_pct": 7.243178471013523,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:LT.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:30:17",
+      "ended_at": "2026-05-26T12:30:28",
+      "duration_s": 10.788920499995584,
+      "detail": {
+        "symbol": "LT.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\LT.FUT_5m_1779778817",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TATASTEEL.FUT:intraday",
+      "status": "ok",
+      "started_at": "2026-05-26T12:30:28",
+      "ended_at": "2026-05-26T12:31:05",
+      "duration_s": 36.71255950000341,
+      "detail": {
+        "symbol": "TATASTEEL.FUT",
+        "strategy_dir": "strategies\\intraday",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TATASTEEL.FUT_5m_1779778828",
+        "competitors": 11,
+        "champion": "lsvwap_5m",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "deterministic:TATASTEEL.FUT:builtin",
+      "status": "ok",
+      "started_at": "2026-05-26T12:31:05",
+      "ended_at": "2026-05-26T12:31:15",
+      "duration_s": 10.57518159999745,
+      "detail": {
+        "symbol": "TATASTEEL.FUT",
+        "strategy_dir": "strategies\\builtin",
+        "run_dir": "C:\\dev\\Fortuna\\logs\\paper_league\\TATASTEEL.FUT_5m_1779778865",
+        "competitors": 3,
+        "champion": "lsvwap",
+        "champ_profit_pct": 0.0,
+        "champ_win_pct": 0.0
+      },
+      "error": null
+    },
+    {
+      "name": "promote_best",
+      "status": "ok",
+      "started_at": "2026-05-26T12:31:15",
+      "ended_at": "2026-05-26T12:31:15",
+      "duration_s": 0.2273923000029754,
+      "detail": {
+        "promoted": [
+          {
+            "symbol": "LT.NS",
+            "run_id": "20260526_105103",
+            "score": 170.13932986661996,
+            "passed": true,
+            "target": "models\\live\\by_symbol\\LT_NS"
+          },
+          {
+            "symbol": "RELIANCE.FUT",
+            "run_id": "20260526_112614",
+            "score": 79.23939252888742,
+            "passed": true,
+            "target": "models\\live\\by_symbol\\RELIANCE_FUT"
+          },
+          {
+            "symbol": "ICICIBANK.NS",
+            "run_id": "20260526_004752",
+            "score": 42.679699397286086,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\ICICIBANK_NS"
+          },
+          {
+            "symbol": "HDFCBANK.NS",
+            "run_id": "20260526_083507",
+            "score": -74.51854165097396,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\HDFCBANK_NS"
+          },
+          {
+            "symbol": "RELIANCE.NS",
+            "run_id": "20260526_084742",
+            "score": -56.82839173276542,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\RELIANCE_NS"
+          },
+          {
+            "symbol": "INFY.NS",
+            "run_id": "20260526_101432",
+            "score": 58.200182544891405,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\INFY_NS"
+          },
+          {
+            "symbol": "TCS.NS",
+            "run_id": "20260526_102107",
+            "score": 40.00174593501804,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TCS_NS"
+          },
+          {
+            "symbol": "SBIN.NS",
+            "run_id": "20260526_102915",
+            "score": 55.92249517733439,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\SBIN_NS"
+          },
+          {
+            "symbol": "AXISBANK.NS",
+            "run_id": "20260526_103630",
+            "score": -48.066522570258456,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\AXISBANK_NS"
+          },
+          {
+            "symbol": "BHARTIARTL.NS",
+            "run_id": "20260526_104440",
+            "score": -117.31198578077037,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\BHARTIARTL_NS"
+          },
+          {
+            "symbol": "TATASTEEL.NS",
+            "run_id": "20260526_105623",
+            "score": -84.74184737882719,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TATASTEEL_NS"
+          },
+          {
+            "symbol": "ICICIBANK.FUT",
+            "run_id": "20260526_110541",
+            "score": -37.94112468665868,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\ICICIBANK_FUT"
+          },
+          {
+            "symbol": "HDFCBANK.FUT",
+            "run_id": "20260526_111644",
+            "score": -123.38154542496916,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\HDFCBANK_FUT"
+          },
+          {
+            "symbol": "INFY.FUT",
+            "run_id": "20260526_113439",
+            "score": -0.997472033926929,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\INFY_FUT"
+          },
+          {
+            "symbol": "TCS.FUT",
+            "run_id": "20260526_114324",
+            "score": -8.886460396301912,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TCS_FUT"
+          },
+          {
+            "symbol": "AXISBANK.FUT",
+            "run_id": "20260526_115055",
+            "score": -119.14595933360978,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\AXISBANK_FUT"
+          },
+          {
+            "symbol": "BHARTIARTL.FUT",
+            "run_id": "20260526_115732",
+            "score": -121.87403781294736,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\BHARTIARTL_FUT"
+          },
+          {
+            "symbol": "LT.FUT",
+            "run_id": "20260526_120350",
+            "score": -120.95420241105808,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\LT_FUT"
+          },
+          {
+            "symbol": "TATASTEEL.FUT",
+            "run_id": "20260526_120957",
+            "score": 40.82486297192925,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TATASTEEL_FUT"
+          }
+        ],
+        "count": 19
+      },
+      "error": null
+    }
+  ],
+  "overall_status": "partial (1 failures)"
+}

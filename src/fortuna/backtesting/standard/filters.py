@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from fortuna.backtesting.standard.config import BenchmarkTargets, FilterThresholds
-from fortuna.reporting.strategy_tester.metrics import PerformanceMetrics, RiskMetrics
+from fortuna.reporting.strategy_tester.metrics import (
+    PerformanceMetrics,
+    RiskMetrics,
+    StrategyMetrics,
+)
 
 
 @dataclass
@@ -23,6 +27,68 @@ class FilterVerdict:
             "score": round(self.score, 2),
             "benchmarks_met": {k: bool(v) for k, v in self.benchmarks_met.items()},
         }
+
+    @classmethod
+    def evaluate(
+        cls,
+        metrics: "StrategyMetrics",
+        *,
+        period_days: int,
+        thresholds: Optional["FilterThresholds"] = None,
+        benchmarks: Optional["BenchmarkTargets"] = None,
+    ) -> "FilterVerdict":
+        """Adapter over ``evaluate_strategy`` that accepts a full ``StrategyMetrics``.
+
+        Phase 2 callers (RL training callbacks, agent critic) treat the verdict
+        as the canonical PASS/FAIL signal at fold boundaries.
+        """
+        return evaluate_strategy(
+            metrics.performance,
+            metrics.risk,
+            thresholds=thresholds or FilterThresholds(),
+            benchmarks=benchmarks or BenchmarkTargets(),
+            period_days=period_days,
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, _VerdictSentinel):
+            return self.passed == other.passed
+        if isinstance(other, FilterVerdict):
+            return (
+                self.passed == other.passed
+                and self.reasons == other.reasons
+                and self.score == other.score
+                and self.benchmarks_met == other.benchmarks_met
+            )
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self.passed, tuple(self.reasons), self.score))
+
+
+@dataclass(frozen=True)
+class _VerdictSentinel:
+    """Class-attribute sentinel so ``verdict == FilterVerdict.PASS`` works.
+
+    A bare ``FilterVerdict(passed=True)`` would still work for equality, but a
+    dedicated sentinel keeps the comparison stable across reasons lists.
+    """
+
+    passed: bool
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, _VerdictSentinel):
+            return self.passed == other.passed
+        if isinstance(other, FilterVerdict):
+            return self.passed == other.passed
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(("VerdictSentinel", self.passed))
+
+
+FilterVerdict.PASS = _VerdictSentinel(passed=True)  # type: ignore[attr-defined]
+FilterVerdict.FAIL = _VerdictSentinel(passed=False)  # type: ignore[attr-defined]
 
 
 def evaluate_strategy(

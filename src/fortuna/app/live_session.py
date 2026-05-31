@@ -10,27 +10,15 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from fortuna.backtesting.standard.config import SessionRules
 from fortuna.data.manager import MarketDataManager
-from fortuna.data.sources.smartapi_bar_aggregator import OhlcvBar
+from fortuna.data.sources.smartapi_bar_aggregator import (
+    OhlcvBar,
+)
 from fortuna.data.sources.smartapi_live import SmartAPILiveBarFeed
 from fortuna.utils.logging import get_logger
+from fortuna.utils.nse_session import in_nse_session
 
 logger = get_logger(__name__)
-
-_NSE_SESSION = SessionRules()
-_OPEN_MIN = int(_NSE_SESSION.market_open.split(":")[0]) * 60 + int(_NSE_SESSION.market_open.split(":")[1])
-_CLOSE_MIN = int(_NSE_SESSION.market_close.split(":")[0]) * 60 + int(_NSE_SESSION.market_close.split(":")[1])
-
-
-def _in_nse_session(ts: pd.Timestamp) -> bool:
-    """True when ``ts`` lies inside an NSE regular session (Mon-Fri, 09:15-15:30 IST)."""
-    if ts.tzinfo is not None:
-        ts = ts.tz_convert("Asia/Kolkata").tz_localize(None)
-    if ts.weekday() >= 5:
-        return False
-    minutes = ts.hour * 60 + ts.minute
-    return _OPEN_MIN <= minutes <= _CLOSE_MIN
 
 
 def _to_naive_ist(ts: pd.Timestamp) -> pd.Timestamp:
@@ -94,9 +82,14 @@ class LiveSessionBridge:
         bar = self._feed.aggregator.current_bar
         if bar is None:
             return None
-        if not _in_nse_session(bar.datetime):
+        if not in_nse_session(bar.datetime):
             return None
         ts = _to_naive_ist(bar.datetime)
+        with self._lock:
+            if not self._ohlcv.empty:
+                last_closed = pd.Timestamp(self._ohlcv.index.max())
+                if ts < last_closed:
+                    return None
         return pd.DataFrame(
             {
                 "open": [bar.open],
@@ -109,7 +102,7 @@ class LiveSessionBridge:
         )
 
     def _append_bar(self, bar: OhlcvBar) -> None:
-        if not _in_nse_session(bar.datetime):
+        if not in_nse_session(bar.datetime):
             logger.debug("dropping off-session bar %s %s", self._symbol, bar.datetime)
             return
         ts = _to_naive_ist(bar.datetime)
@@ -131,7 +124,7 @@ class LiveSessionBridge:
         self._manager.append_bar(self._symbol, self._timeframe, row)
 
     def _handle_bar(self, bar: OhlcvBar) -> None:
-        if not _in_nse_session(bar.datetime):
+        if not in_nse_session(bar.datetime):
             return
         self._append_bar(bar)
         self._events.put(LiveEvent(LiveEventType.BAR_CLOSED, bar))
@@ -142,7 +135,7 @@ class LiveSessionBridge:
                 logger.warning("on_bar_closed error: %s", e)
 
     def _handle_tick(self, bar: OhlcvBar) -> None:
-        if not _in_nse_session(bar.datetime):
+        if not in_nse_session(bar.datetime):
             return
         self._events.put(LiveEvent(LiveEventType.TICK, bar))
 

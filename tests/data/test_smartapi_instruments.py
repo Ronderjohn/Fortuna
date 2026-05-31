@@ -122,12 +122,13 @@ def test_resolve_reliance_ns(scrip_fixture: Path) -> None:
     assert ref.is_future is False
 
 
-def test_registry_indexes_nfo_futures_and_skips_options(scrip_fixture: Path) -> None:
+def test_registry_indexes_nfo_futures_and_options(scrip_fixture: Path) -> None:
     reg = _registry(scrip_fixture)
     # 3 EQ in NSE (RELIANCE, CROMPTON; FOO is BSE so skipped).
     assert reg.equity_count == 2
     # CROMPTON + NIFTY have futures chains.
     assert reg.futures_base_count == 2
+    assert reg.options_base_count == 1
 
 
 def test_resolve_future_picks_front_month(
@@ -181,6 +182,23 @@ def test_resolve_unknown_future_raises(scrip_fixture: Path) -> None:
         reg.resolve("CROMPTON.FUT.01JAN1999")
 
 
+def test_resolve_option_with_canonical_symbol(scrip_fixture: Path) -> None:
+    reg = _registry(scrip_fixture)
+    ref = reg.resolve("CROMPTON.OPT.PE.400.26MAY2026")
+    assert ref.instrumenttype == "OPTSTK"
+    assert ref.option_type == "PE"
+    assert ref.strike == 400.0
+    assert ref.tradingsymbol == "CROMPTON26MAY26P400"
+
+
+def test_search_options_filters_chain(scrip_fixture: Path) -> None:
+    reg = _registry(scrip_fixture)
+    hits = reg.search_options("CROMPTON", option_type="PE", strike=400.0, limit=5)
+    assert len(hits) == 1
+    assert hits[0].segment == "OPTIONS"
+    assert hits[0].symbol == "CROMPTON.OPT.PE.400.26MAY2026"
+
+
 def test_search_returns_both_equity_and_futures_for_same_base(
     scrip_fixture: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -198,7 +216,7 @@ def test_search_returns_both_equity_and_futures_for_same_base(
     hits = reg.search("CROMPTON", limit=10)
     by_symbol = {h.symbol: h for h in hits}
     assert "CROMPTON.NS" in by_symbol, f"missing equity hit; got {list(by_symbol)}"
-    assert "CROMPTON.FUT" in by_symbol, f"missing futures hit; got {list(by_symbol)}"
+    assert "CROMPTON.FUT" in by_symbol, f"missing front-month future hit; got {list(by_symbol)}"
     assert by_symbol["CROMPTON.NS"].segment == "EQUITY"
     assert by_symbol["CROMPTON.FUT"].segment == "FUTURES"
     # The futures display must surface the resolved expiry + tradingsymbol.
@@ -206,10 +224,79 @@ def test_search_returns_both_equity_and_futures_for_same_base(
     assert "26-May-2026" in by_symbol["CROMPTON.FUT"].display
 
 
-def test_catalog_includes_futures_chain_bases(scrip_fixture: Path) -> None:
+def test_search_surfaces_all_active_monthly_contracts(
+    scrip_fixture: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """NSE always lists 3 monthly futures (near/mid/far). The picker must
+    surface all of them so users can search past the front-month expiry."""
     reg = _registry(scrip_fixture)
+
+    class _FrozenDate(date):
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return date(2026, 5, 1)
+
+    monkeypatch.setattr("fortuna.data.instruments.date", _FrozenDate)
+
+    hits = reg.search("CROMPTON", limit=20)
+    fut_hits = [h for h in hits if h.segment == "FUTURES"]
+    fut_symbols = {h.symbol for h in fut_hits}
+    # Front-month keeps the bare ``.FUT`` symbol so existing watchlists
+    # continue tracking the rolling contract; back-months are pinned with
+    # explicit expiries so they're distinct rows in the picker.
+    assert fut_symbols == {
+        "CROMPTON.FUT",
+        "CROMPTON.FUT.30JUN2026",
+        "CROMPTON.FUT.28JUL2026",
+    }, fut_symbols
+    # All three rows must resolve back through the registry.
+    for sym in fut_symbols:
+        ref = reg.resolve(sym)
+        assert ref.is_future
+    # The expired-April contract must NOT appear.
+    assert not any("29APR2026" in h.symbol for h in fut_hits)
+
+
+def test_catalog_includes_full_active_futures_chain(
+    scrip_fixture: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``catalog()`` must list every active monthly contract per base."""
+    reg = _registry(scrip_fixture)
+
+    class _FrozenDate(date):
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return date(2026, 5, 1)
+
+    monkeypatch.setattr("fortuna.data.instruments.date", _FrozenDate)
+
     hits = reg.catalog()
     segments = {h.segment for h in hits}
     assert segments == {"EQUITY", "FUTURES"}
     fut_symbols = {h.symbol for h in hits if h.segment == "FUTURES"}
+    # CROMPTON has 3 active monthly contracts (May, Jun, Jul); NIFTY has 1.
+    assert fut_symbols == {
+        "CROMPTON.FUT",
+        "CROMPTON.FUT.30JUN2026",
+        "CROMPTON.FUT.28JUL2026",
+        "NIFTY.FUT",
+    }, fut_symbols
+
+
+def test_contract_depth_can_be_capped(
+    scrip_fixture: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Setting ``contract_depth=1`` collapses the picker back to front-month."""
+    settings = smartapi_settings.SmartAPISettings(scrip_cache_path=scrip_fixture)
+    reg = InstrumentRegistry(settings, contract_depth=1)
+    reg.ensure_loaded()
+
+    class _FrozenDate(date):
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return date(2026, 5, 1)
+
+    monkeypatch.setattr("fortuna.data.instruments.date", _FrozenDate)
+
+    fut_symbols = {h.symbol for h in reg.catalog() if h.segment == "FUTURES"}
     assert fut_symbols == {"CROMPTON.FUT", "NIFTY.FUT"}

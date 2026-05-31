@@ -1,0 +1,251 @@
+{
+  "started_at": "2026-05-26T12:33:08",
+  "ended_at": "2026-05-26T12:49:19",
+  "total_duration_s": 970.6621261000037,
+  "basket": [
+    "SBIN.NS",
+    "SBIN.FUT"
+  ],
+  "steps": [
+    {
+      "name": "backfill:SBIN.NS",
+      "status": "ok",
+      "started_at": "2026-05-26T12:33:08",
+      "ended_at": "2026-05-26T12:33:30",
+      "duration_s": 21.13086010000552,
+      "detail": {
+        "symbol": "SBIN.NS",
+        "rows": 8925,
+        "first": "2025-11-27 12:35:00",
+        "last": "2026-05-26 12:30:00",
+        "force_refresh": false
+      },
+      "error": null
+    },
+    {
+      "name": "backfill:SBIN.FUT",
+      "status": "ok",
+      "started_at": "2026-05-26T12:33:30",
+      "ended_at": "2026-05-26T12:33:36",
+      "duration_s": 6.182228799996665,
+      "detail": {
+        "symbol": "SBIN.FUT",
+        "rows": 8925,
+        "first": "2025-11-27 12:35:00",
+        "last": "2026-05-26 12:30:00",
+        "force_refresh": true
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:SBIN.NS:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T12:33:36",
+      "ended_at": "2026-05-26T12:41:09",
+      "duration_s": 453.275636499995,
+      "detail": {
+        "symbol": "SBIN.NS",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_123410",
+        "passed": false,
+        "sharpe": -1.1174466802617706,
+        "pf": 0.8282960376086355,
+        "trades": 20,
+        "win_rate": 35.0,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "rl_train:SBIN.FUT:CnnPolicy",
+      "status": "ok",
+      "started_at": "2026-05-26T12:41:09",
+      "ended_at": "2026-05-26T12:49:19",
+      "duration_s": 489.8104076000018,
+      "detail": {
+        "symbol": "SBIN.FUT",
+        "policy": "CnnPolicy",
+        "run_id": "20260526_124143",
+        "passed": false,
+        "sharpe": -6.141292083261231,
+        "pf": 0.3852716793098773,
+        "trades": 36,
+        "win_rate": 30.555555555555557,
+        "reward_config": {
+          "step_pnl_weight": 1.0,
+          "holding_penalty": 0.0001,
+          "overtrading_penalty": 0.002,
+          "sharpe_weight": 0.3,
+          "drawdown_penalty": 0.5,
+          "profit_factor_weight": 0.1,
+          "filter_fail_penalty": 2.0,
+          "max_trades_per_episode": 30
+        }
+      },
+      "error": null
+    },
+    {
+      "name": "promote_best",
+      "status": "ok",
+      "started_at": "2026-05-26T12:49:19",
+      "ended_at": "2026-05-26T12:49:19",
+      "duration_s": 0.25864890000229934,
+      "detail": {
+        "promoted": [
+          {
+            "symbol": "LT.NS",
+            "run_id": "20260526_105103",
+            "score": 170.13932986661996,
+            "passed": true,
+            "target": "models\\live\\by_symbol\\LT_NS"
+          },
+          {
+            "symbol": "RELIANCE.FUT",
+            "run_id": "20260526_112614",
+            "score": 79.23939252888742,
+            "passed": true,
+            "target": "models\\live\\by_symbol\\RELIANCE_FUT"
+          },
+          {
+            "symbol": "ICICIBANK.NS",
+            "run_id": "20260526_004752",
+            "score": 42.679699397286086,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\ICICIBANK_NS"
+          },
+          {
+            "symbol": "HDFCBANK.NS",
+            "run_id": "20260526_083507",
+            "score": -74.51854165097396,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\HDFCBANK_NS"
+          },
+          {
+            "symbol": "RELIANCE.NS",
+            "run_id": "20260526_084742",
+            "score": -56.82839173276542,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\RELIANCE_NS"
+          },
+          {
+            "symbol": "INFY.NS",
+            "run_id": "20260526_101432",
+            "score": 58.200182544891405,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\INFY_NS"
+          },
+          {
+            "symbol": "TCS.NS",
+            "run_id": "20260526_102107",
+            "score": 40.00174593501804,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TCS_NS"
+          },
+          {
+            "symbol": "SBIN.NS",
+            "run_id": "20260526_102915",
+            "score": 55.92249517733439,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\SBIN_NS"
+          },
+          {
+            "symbol": "AXISBANK.NS",
+            "run_id": "20260526_103630",
+            "score": -48.066522570258456,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\AXISBANK_NS"
+          },
+          {
+            "symbol": "BHARTIARTL.NS",
+            "run_id": "20260526_104440",
+            "score": -117.31198578077037,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\BHARTIARTL_NS"
+          },
+          {
+            "symbol": "TATASTEEL.NS",
+            "run_id": "20260526_105623",
+            "score": -84.74184737882719,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TATASTEEL_NS"
+          },
+          {
+            "symbol": "ICICIBANK.FUT",
+            "run_id": "20260526_110541",
+            "score": -37.94112468665868,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\ICICIBANK_FUT"
+          },
+          {
+            "symbol": "HDFCBANK.FUT",
+            "run_id": "20260526_111644",
+            "score": -123.38154542496916,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\HDFCBANK_FUT"
+          },
+          {
+            "symbol": "INFY.FUT",
+            "run_id": "20260526_113439",
+            "score": -0.997472033926929,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\INFY_FUT"
+          },
+          {
+            "symbol": "TCS.FUT",
+            "run_id": "20260526_114324",
+            "score": -8.886460396301912,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TCS_FUT"
+          },
+          {
+            "symbol": "AXISBANK.FUT",
+            "run_id": "20260526_115055",
+            "score": -119.14595933360978,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\AXISBANK_FUT"
+          },
+          {
+            "symbol": "BHARTIARTL.FUT",
+            "run_id": "20260526_115732",
+            "score": -121.87403781294736,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\BHARTIARTL_FUT"
+          },
+          {
+            "symbol": "LT.FUT",
+            "run_id": "20260526_120350",
+            "score": -120.95420241105808,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\LT_FUT"
+          },
+          {
+            "symbol": "TATASTEEL.FUT",
+            "run_id": "20260526_120957",
+            "score": 40.82486297192925,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\TATASTEEL_FUT"
+          },
+          {
+            "symbol": "SBIN.FUT",
+            "run_id": "20260526_124143",
+            "score": -115.67339980743297,
+            "passed": false,
+            "target": "models\\live\\by_symbol\\SBIN_FUT"
+          }
+        ],
+        "count": 20
+      },
+      "error": null
+    }
+  ],
+  "overall_status": "ok"
+}
