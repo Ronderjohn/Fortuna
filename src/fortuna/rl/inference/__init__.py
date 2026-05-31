@@ -8,15 +8,19 @@ from fortuna.rl.inference.regime_detector import (
     load_detector_if_available,
 )
 from fortuna.rl.inference.signal_generator import (
-    RLSignalGenerator,
     RLLiveSignal,
+    RLSignalGenerator,
+    resolve_checkpoint_for_symbol,
     resolve_live_checkpoint_dir,
+    resolve_live_checkpoint_dir_for_symbol,
 )
 
 __all__ = [
     "RLSignalGenerator",
     "RLLiveSignal",
+    "resolve_checkpoint_for_symbol",
     "resolve_live_checkpoint_dir",
+    "resolve_live_checkpoint_dir_for_symbol",
     "RegimeDetector",
     "REGIMES",
     "load_detector_if_available",

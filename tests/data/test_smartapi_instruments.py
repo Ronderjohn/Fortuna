@@ -122,12 +122,13 @@ def test_resolve_reliance_ns(scrip_fixture: Path) -> None:
     assert ref.is_future is False
 
 
-def test_registry_indexes_nfo_futures_and_skips_options(scrip_fixture: Path) -> None:
+def test_registry_indexes_nfo_futures_and_options(scrip_fixture: Path) -> None:
     reg = _registry(scrip_fixture)
     # 3 EQ in NSE (RELIANCE, CROMPTON; FOO is BSE so skipped).
     assert reg.equity_count == 2
     # CROMPTON + NIFTY have futures chains.
     assert reg.futures_base_count == 2
+    assert reg.options_base_count == 1
 
 
 def test_resolve_future_picks_front_month(
@@ -179,6 +180,23 @@ def test_resolve_unknown_future_raises(scrip_fixture: Path) -> None:
         reg.resolve("NONEXISTENT.FUT")
     with pytest.raises(KeyError):
         reg.resolve("CROMPTON.FUT.01JAN1999")
+
+
+def test_resolve_option_with_canonical_symbol(scrip_fixture: Path) -> None:
+    reg = _registry(scrip_fixture)
+    ref = reg.resolve("CROMPTON.OPT.PE.400.26MAY2026")
+    assert ref.instrumenttype == "OPTSTK"
+    assert ref.option_type == "PE"
+    assert ref.strike == 400.0
+    assert ref.tradingsymbol == "CROMPTON26MAY26P400"
+
+
+def test_search_options_filters_chain(scrip_fixture: Path) -> None:
+    reg = _registry(scrip_fixture)
+    hits = reg.search_options("CROMPTON", option_type="PE", strike=400.0, limit=5)
+    assert len(hits) == 1
+    assert hits[0].segment == "OPTIONS"
+    assert hits[0].symbol == "CROMPTON.OPT.PE.400.26MAY2026"
 
 
 def test_search_returns_both_equity_and_futures_for_same_base(

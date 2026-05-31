@@ -50,3 +50,24 @@ def test_terminal_reward_penalizes_filter_fail():
 
     assert r_pass > r_fail
     assert r_fail < 0  # filter_fail_penalty active and zero metrics give negative bonus
+
+
+def test_terminal_reward_penalizes_hold_lock():
+    cfg = RewardConfig(
+        sharpe_weight=0.0,
+        profit_factor_weight=0.0,
+        drawdown_penalty=0.0,
+        filter_fail_penalty=0.0,
+        hold_lock_penalty=2.0,
+    )
+    fn = RewardFunction(cfg, MarketCostModel())
+    zero = StrategyMetrics.zero()
+    verdict_pass = FilterVerdict(passed=True)
+
+    r_zero_trades = fn.terminal_reward(zero, verdict_pass)
+    active = StrategyMetrics.zero()
+    active.performance.total_trades = 5
+    r_active = fn.terminal_reward(active, verdict_pass)
+
+    assert r_zero_trades < r_active
+    assert r_zero_trades == -2.0

@@ -1,21 +1,17 @@
 # Fortuna
 
 Institutional-grade autonomous quant research system for **NSE intraday equities**.
-A deterministic, offline-first research stack built around a Streamlit dashboard that
-mirrors TradingView's chart + Strategy Tester workflow, with reproducible backtests,
-walk-forward validation, and an adaptive paper-trading league running on local
-Parquet/DuckDB data.
+A deterministic, offline-first research and advisory stack built around a
+Streamlit dashboard that mirrors TradingView's chart + Strategy Tester workflow,
+with reproducible backtests, walk-forward validation, model promotion, optional
+agentic advisory, paper learning, and downstream Telegram notifications.
 
-> **Long-term goal.** Integrate powerful ML / DL models with **reinforcement
-> learning** to generate trading strategies that produce the best indicators
-> and signals, then let **autonomous agents** consume those signals to make
-> decisions and execute orders — all driven by adaptive learning patterns.
->
-> **Phase 1 scope (this repo).** The deterministic foundation underneath that
-> vision: strategy DSL → data → indicators → backtests → metrics → reporting
-> → dashboard → live read-only feed. RL training, decision agents, and order
-> execution are explicit later-phase work — Phase 1 ships the honest reward
-> signal and the validated strategy surface they will plug into.
+Fortuna is **advisory-first**:
+- deterministic strategy signals remain the transparent baseline,
+- ML and RL participate only when artifacts are validated and loaded,
+- agentic orchestration produces one final advisory decision per symbol,
+- paper learning and notifications remain downstream of that decision,
+- real-money auto-execution is still out of scope.
 
 ---
 
@@ -37,6 +33,23 @@ Parquet/DuckDB data.
 The dashboard is the **primary** way to use Fortuna. Everything else (CLI scripts,
 arena, institutional pipeline, paper league) writes the same artifact format the
 dashboard already understands.
+
+### Advisory stack
+
+Fortuna now includes an optional **agentic advisory pipeline** on top of the
+deterministic research stack:
+
+- **ML signal scorer** — scores deterministic signal quality ([docs](docs/ml_signal_scorer.md))
+- **RL policies** — per-symbol advisory votes after OOS validation ([docs](docs/rl_policy_workflow.md))
+- **Agentic orchestrator** — combines evidence into one `AgentDecision` ([docs](docs/agentic_advisory.md))
+- **Native conversational adapter** — free-form operator prompts normalized into typed advisory tools
+- **Model promotion registry** — auditable live pointers for ML/RL artifacts
+- **Telegram alerts** — deduped, throttled, downstream of final decisions only
+- **Operator runbook** — [docs/operator_runbook.md](docs/operator_runbook.md)
+- **Current system map** — [docs/current_system_flow.md](docs/current_system_flow.md)
+
+Default mode remains **advisory**. Deterministic dashboard signals continue when
+ML, RL, agentic, or Telegram subsystems are disabled or unavailable.
 
 ---
 
@@ -89,6 +102,43 @@ FORTUNA_INSECURE_SSL=false      # only true on Avast/AVG/corporate TLS-MITM boxe
 
 ---
 
+## Operator quick start
+
+```powershell
+$env:FORTUNA_CONFIG = "configs/intraday.yaml"
+uv run python scripts/run_operator_preflight.py
+uv run python scripts/run_dashboard.py
+```
+
+Helpful next steps:
+- Validate SmartAPI env more deeply: `uv run python scripts/test_smartapi_env.py`
+- Run the Telegram assistant: `uv run python scripts/run_telegram_bot.py`
+- Train RL: `uv run --group rl python scripts/run_rl_train.py --help`
+- Train ML scorer: `uv run python scripts/train_ml_signal_scorer.py --help`
+- Promote validated artifacts: `uv run python scripts/promote_model.py --help`
+
+Minimal advisory + Telegram flags:
+
+```env
+FORTUNA_AGENTIC_ENABLED=1
+FORTUNA_TELEGRAM_ENABLED=1
+FORTUNA_TELEGRAM_BOT_TOKEN=...
+FORTUNA_TELEGRAM_CHAT_ID=...
+```
+
+Optional native framework layer:
+
+```env
+FORTUNA_CONVERSATIONAL_ADAPTER_ENABLED=true
+FORTUNA_CONVERSATIONAL_ADAPTER_MODE=heuristic
+```
+
+See [docs/telegram_trading_assistant.md](docs/telegram_trading_assistant.md)
+for the Telegram bot workflow, supported commands, and examples for equities,
+futures, and options.
+
+---
+
 ## Quick start — the dashboard
 
 ```powershell
@@ -112,7 +162,8 @@ What you get:
 - **Live mode** (when SmartAPI is open): bars, BUY/SELL/EXIT markers, and indicator overlays
   update **in place** with no Streamlit reruns (via a stdlib HTTP stream server polled
   by the chart iframe at ~2.5 s)
-- Tabs: **Chart**, **Leaderboard**, **Performance** (per-strategy report cards), **Strategy detail**
+- Tabs: **Chart**, **Leaderboard**, **Performance**, **Strategy detail**, **Models**,
+  **Assistant**, and optional paper/execution monitoring surfaces
 
 See [docs/smartapi_charts.md](docs/smartapi_charts.md) for the chart architecture.
 
@@ -384,21 +435,17 @@ fortuna/
 **Included.** Strategy DSL · data layer · indicator engine · NumPy + vectorbt backtests ·
 institutional walk-forward + Monte Carlo · TradingView-style reporting · Streamlit
 dashboard with Lightweight Charts v5 + in-place streaming · adaptive paper-league ·
-ML/RL-agent interface stubs (`ResearchAgent` / `CriticAgent` / `OptimizerAgent`) ·
-CPU/GPU compute policy.
+agentic advisory orchestrator · ML signal scorer · RL training/inference · model
+promotion registry · Telegram notification hardening (advisory only).
 
-**Planned for later phases — not built yet.** ML / DL feature learning ·
-reinforcement-learning strategy generation · autonomous decision & execution
-agents · live broker order placement · multi-symbol portfolio orchestration ·
-distributed training infrastructure.
+**Still planned / not built.** Live broker order placement · multi-symbol portfolio
+orchestration · distributed training infrastructure · dedicated ML training CLI.
 
-The Phase 1 deliverable is the deterministic foundation that the RL / agent
-phases plug into — `StrategyDefinition` becomes the action space,
-`StrategyMetrics` becomes the reward signal, walk-forward folds become
-train/eval episodes, and the dashboard becomes the agent's console.
+The Phase 1 deliverable is the deterministic foundation; Phases 1–6 add the advisory
+ensemble that operators use via the dashboard and optional Telegram.
 
-See [Phase_1.md](Phase_1.md) for the detailed architecture, flows, design
-rationale, and the contract map onto the ML / RL phase.
+See [Phase_1.md](Phase_1.md) for the original architecture vision and
+[docs/operator_runbook.md](docs/operator_runbook.md) for day-to-day operations.
 
 ---
 

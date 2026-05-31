@@ -7,17 +7,20 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
-
-# Pre-warm import cycle.
-from fortuna.backtesting.standard.calendar import filter_session_bars  # noqa: F401
 
 from fortuna.app.live_signals import (
     SignalType,
     compute_live_signals_with_rl,
 )
+
+# Pre-warm import cycle.
+from fortuna.backtesting.standard.calendar import filter_session_bars  # noqa: F401
+from fortuna.features.builder import FeatureBuilder
 from fortuna.features.position import PositionState
+from fortuna.features.registry import feature_registry_hash
+from fortuna.features.rl_indicators import enrich_for_rl_last_bar
 from fortuna.rl.inference import RLSignalGenerator, resolve_live_checkpoint_dir
+from fortuna.rl.training.checkpoint import OOSMetricsSummary, PolicyCheckpoint
 
 
 def _make_ohlcv(n: int = 80, seed: int = 0) -> pd.DataFrame:
@@ -84,6 +87,16 @@ def test_resolve_live_checkpoint_dir_falls_back_to_latest_validated(tmp_path):
     assert resolved.name == "20260602_120000"
 
 
+def test_resolve_live_checkpoint_dir_can_disable_latest_validated_fallback(tmp_path):
+    d = tmp_path / "validated" / "20260602_120000"
+    d.mkdir(parents=True)
+    (d / "policy.zip").write_bytes(b"\x00")
+
+    resolved = resolve_live_checkpoint_dir(tmp_path, allow_latest_validated=False)
+
+    assert resolved is None
+
+
 def test_action_signal_mapping_complete():
     """All five discrete actions must be reachable through ACTION_TO_SIGNAL."""
     from fortuna.rl.env.actions import (
@@ -148,7 +161,108 @@ def test_generator_loads_real_checkpoint(tmp_path):
     gen = RLSignalGenerator(cp_dir)
     assert gen.is_available
 
+    if not gen.is_advisory_ready:
+        meta = PolicyCheckpoint.read(cp_dir / "metadata.json")
+        meta.advisory_ready = True
+        meta.failure_modes = []
+        meta.write(cp_dir / "metadata.json")
+        gen = RLSignalGenerator(cp_dir)
+
     sig = gen.predict_from_ohlcv(df, PositionState())
     assert sig is not None
     assert sig.signal in set(SignalType)
     assert sig.metadata["run_id"] == meta.run_id
+
+
+def _write_minimal_checkpoint(tmp_path: Path, *, hash_value: str | None = None) -> Path:
+    cp_dir = tmp_path / "cp"
+    cp_dir.mkdir()
+    (cp_dir / "policy.zip").write_bytes(b"\x00")
+    meta = PolicyCheckpoint(
+        run_id="unit",
+        symbol="TEST.NS",
+        timeframe="5m",
+        obs_shape=[8, 10],
+        policy_type="MlpPolicy",
+        total_timesteps=1,
+        n_folds=1,
+        oos_metrics=OOSMetricsSummary(total_trades=1),
+        verdict_passed=True,
+        feature_registry_hash=hash_value or feature_registry_hash(),
+        advisory_ready=True,
+    )
+    meta.write(cp_dir / "metadata.json")
+    builder = FeatureBuilder(n_bars=8)
+    builder.save(cp_dir / "normalizer.json")
+    return cp_dir
+
+
+def test_generator_rejects_feature_hash_mismatch(tmp_path):
+    cp_dir = _write_minimal_checkpoint(tmp_path, hash_value="deadbeef")
+    gen = RLSignalGenerator(cp_dir)
+    assert gen.is_available is False
+    assert gen.load_error is not None
+
+
+def test_generator_rejects_missing_normalizer(tmp_path):
+    cp_dir = _write_minimal_checkpoint(tmp_path)
+    (cp_dir / "normalizer.json").unlink()
+    gen = RLSignalGenerator(cp_dir)
+    assert gen.is_available is False
+    assert "normalizer" in (gen.load_error or "").lower()
+
+
+def test_generator_predict_blocked_when_not_advisory_ready(tmp_path):
+    cp_dir = _write_minimal_checkpoint(tmp_path)
+    meta = PolicyCheckpoint.read(cp_dir / "metadata.json")
+    meta.advisory_ready = False
+    meta.failure_modes = ["verdict_failed"]
+    meta.write(cp_dir / "metadata.json")
+    # Load will succeed only if PPO.load works — skip PPO by testing property path
+    gen = RLSignalGenerator(None)
+    gen._model = object()
+    gen._builder = FeatureBuilder(n_bars=8)
+    gen._metadata = meta
+    assert gen.is_available is True
+    assert gen.is_advisory_ready is False
+    row = enrich_for_rl_last_bar(_make_ohlcv())
+    assert gen.predict(row, PositionState(), row.name) is None
+
+
+def test_generator_blocks_non_advisory_active_regime_policy(tmp_path):
+    base_meta = PolicyCheckpoint(
+        run_id="base",
+        symbol="TEST.NS",
+        timeframe="5m",
+        obs_shape=[8, 10],
+        policy_type="MlpPolicy",
+        total_timesteps=1,
+        n_folds=1,
+        oos_metrics=OOSMetricsSummary(total_trades=1),
+        verdict_passed=True,
+        advisory_ready=True,
+    )
+    regime_meta = PolicyCheckpoint(
+        run_id="trend",
+        symbol="TEST.NS",
+        timeframe="5m",
+        obs_shape=[8, 10],
+        policy_type="MlpPolicy",
+        total_timesteps=1,
+        n_folds=1,
+        oos_metrics=OOSMetricsSummary(total_trades=0),
+        verdict_passed=False,
+        advisory_ready=False,
+        failure_modes=["verdict_failed"],
+    )
+    gen = RLSignalGenerator(None)
+    gen._model = object()
+    gen._builder = FeatureBuilder(n_bars=8)
+    gen._metadata = base_meta
+    gen._regime_policies["TRENDING"] = (object(), FeatureBuilder(n_bars=8), regime_meta)
+    gen.set_active_regime("TRENDING")
+
+    row = enrich_for_rl_last_bar(_make_ohlcv())
+
+    assert gen.is_advisory_ready is False
+    assert gen.predict(row, PositionState(), row.name) is None

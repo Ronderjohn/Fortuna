@@ -1,0 +1,43 @@
+# Tier 1 live-execution defaults.
+#
+# Loaded by ``fortuna.execution.risk.load_risk_config`` and passed to
+# ``RiskGate`` + ``PositionSizer``.
+#
+# The whole stack is OFF by default — toggle via
+#   FORTUNA_EXECUTION_ENABLED=1
+# in your .env, or set ``execution.enabled: true`` in configs/default.yaml.
+
+# ─── account ────────────────────────────────────────────────────────────
+init_cash: 100000.0          # INR; conservative retail starting point
+
+# ─── per-trade risk ─────────────────────────────────────────────────────
+per_symbol_max_notional: 25000.0   # max INR exposure to any single symbol
+gross_exposure_cap_pct: 100.0      # max gross exposure as % of init_cash
+risk_per_trade_pct: 1.0            # fixed-fractional risk budget per entry
+
+# ─── intraday circuit breaker ───────────────────────────────────────────
+daily_loss_halt_pct: 2.0           # halt new entries at -2% from session peak
+
+# ─── per-strategy cooldown ──────────────────────────────────────────────
+per_strategy_cooldown_losses: 3    # pause a strategy after N consecutive losses
+
+# ─── sizing method ──────────────────────────────────────────────────────
+position_size_method: fixed_fractional   # "fixed_fractional" or "kelly_capped"
+kelly_cap_pct: 25.0                # used only when method is kelly_capped
+
+# ─── session window ─────────────────────────────────────────────────────
+# No new entries outside [start, end] IST. Exits / flattens are always
+# allowed regardless of window.
+session_window: ["09:20", "15:10"]
+
+# ─── minimum order ──────────────────────────────────────────────────────
+min_order_qty: 1
+
+# ─── F&O lot-size overrides ─────────────────────────────────────────────
+# Equity defaults to 1 share. Add entries here for NFO contracts whose
+# lot size must be enforced (the sizer rounds qty down to a multiple).
+# Example:
+#   lot_sizes:
+#     RELIANCE.FUT: 500
+#     NIFTY.FUT:    50
+lot_sizes: {}

@@ -66,6 +66,53 @@ class Settings(BaseSettings):
     strategies_rejected: Path = Field(default=Path("strategies/rejected"))
     logs_dir: Path = Field(default=Path("logs"))
 
+    # ─── Live execution (Tier 1) ────────────────────────────────────────
+    # Default OFF: existing CLI / notebook users see no behaviour change.
+    # Turn on via FORTUNA_EXECUTION_ENABLED=1 in .env or settings YAML to
+    # have the dashboard route live signals through the paper broker.
+    execution_enabled: bool = False
+    execution_config_path: Path = Field(default=Path("config/execution.yaml"))
+    execution_broker: str = "paper"  # one of: "paper", "smartapi" (stub)
+
+    # ─── Portfolio-aware paper simulation (Phase 1) ─────────────────────
+    # Read-only sync of cash + positions + holdings from SmartAPI into the
+    # paper LiveAccount. NEVER places real orders — those go through the
+    # broker, which still requires execution_broker="smartapi" (stub).
+    # Default OFF so users opt in explicitly.
+    execution_account_sync: bool = False
+    # Re-pull the account snapshot every N minutes during the session
+    # (0 = sync once at start only).
+    execution_account_refresh_minutes: int = 0
+
+    # ─── Agentic advisory layer ──────────────────────────────────────────
+    # Default OFF: the existing dashboard/signal workflow remains unchanged
+    # unless explicitly enabled.
+    agentic_enabled: bool = False
+    agentic_paper_learning_enabled: bool = False
+    agentic_log_dir: Path = Field(default=Path("logs/agentic"))
+    agentic_ml_scorer_enabled: bool = False
+    ml_scorer_artifact_dir: Path = Field(default=Path("models/ml_signal_scorer/validated"))
+
+    model_registry_enabled: bool = False
+    model_promotion_required: bool = True
+
+    # RL inference: when False (default), only per-symbol checkpoints are used.
+    rl_allow_global_policy: bool = False
+
+    # Telegram notifications (bot token + chat id).
+    telegram_enabled: bool = False
+    telegram_provider: str = "telegram"
+    telegram_dedupe_memory: int = 500
+    telegram_max_per_symbol_per_session: int = 10
+    telegram_min_interval_seconds: int = 300
+    telegram_quiet_hours_enabled: bool = True
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_request_audit_enabled: bool = True
+    conversational_adapter_enabled: bool = False
+    conversational_adapter_mode: str = "heuristic"
+    conversational_max_history: int = 12
+
     project_root: Path = Field(default=_PROJECT_ROOT)
 
     @classmethod
@@ -126,6 +173,81 @@ class Settings(BaseSettings):
                 flat["strategies_rejected"] = Path(paths["strategies_rejected"])
             if "logs" in paths:
                 flat["logs_dir"] = Path(paths["logs"])
+
+        execution = raw.get("execution", {})
+        if execution:
+            if "enabled" in execution:
+                flat["execution_enabled"] = bool(execution["enabled"])
+            if "config_path" in execution:
+                flat["execution_config_path"] = Path(execution["config_path"])
+            if "broker" in execution:
+                flat["execution_broker"] = str(execution["broker"])
+            if "account_sync" in execution:
+                flat["execution_account_sync"] = bool(execution["account_sync"])
+            if "account_refresh_minutes" in execution:
+                flat["execution_account_refresh_minutes"] = int(
+                    execution["account_refresh_minutes"]
+                )
+
+        agentic = raw.get("agentic", {})
+        if agentic:
+            if "enabled" in agentic:
+                flat["agentic_enabled"] = bool(agentic["enabled"])
+            if "paper_learning_enabled" in agentic:
+                flat["agentic_paper_learning_enabled"] = bool(agentic["paper_learning_enabled"])
+            if "log_dir" in agentic:
+                flat["agentic_log_dir"] = Path(agentic["log_dir"])
+            if "ml_scorer_enabled" in agentic:
+                flat["agentic_ml_scorer_enabled"] = bool(agentic["ml_scorer_enabled"])
+            if "ml_scorer_artifact_dir" in agentic:
+                flat["ml_scorer_artifact_dir"] = Path(agentic["ml_scorer_artifact_dir"])
+            telegram = agentic.get("telegram", {}) or {}
+            if telegram:
+                if "enabled" in telegram:
+                    flat["telegram_enabled"] = bool(telegram["enabled"])
+                if "provider" in telegram:
+                    flat["telegram_provider"] = str(telegram["provider"])
+                if "dedupe_memory" in telegram:
+                    flat["telegram_dedupe_memory"] = int(telegram["dedupe_memory"])
+                if "max_per_symbol_per_session" in telegram:
+                    flat["telegram_max_per_symbol_per_session"] = int(
+                        telegram["max_per_symbol_per_session"]
+                    )
+                if "min_interval_seconds" in telegram:
+                    flat["telegram_min_interval_seconds"] = int(
+                        telegram["min_interval_seconds"]
+                    )
+                if "quiet_hours_enabled" in telegram:
+                    flat["telegram_quiet_hours_enabled"] = bool(
+                        telegram["quiet_hours_enabled"]
+                    )
+                if "bot_token" in telegram:
+                    flat["telegram_bot_token"] = str(telegram["bot_token"])
+                if "chat_id" in telegram:
+                    flat["telegram_chat_id"] = str(telegram["chat_id"])
+                if "request_audit_enabled" in telegram:
+                    flat["telegram_request_audit_enabled"] = bool(
+                        telegram["request_audit_enabled"]
+                    )
+                if "conversational_adapter_enabled" in telegram:
+                    flat["conversational_adapter_enabled"] = bool(
+                        telegram["conversational_adapter_enabled"]
+                    )
+                if "conversational_adapter_mode" in telegram:
+                    flat["conversational_adapter_mode"] = str(
+                        telegram["conversational_adapter_mode"]
+                    )
+                if "conversational_max_history" in telegram:
+                    flat["conversational_max_history"] = int(
+                        telegram["conversational_max_history"]
+                    )
+
+        models = raw.get("models", {})
+        if models:
+            if "registry_enabled" in models:
+                flat["model_registry_enabled"] = bool(models["registry_enabled"])
+            if "promotion_required" in models:
+                flat["model_promotion_required"] = bool(models["promotion_required"])
 
         flat["project_root"] = _PROJECT_ROOT
         return cls(**flat)

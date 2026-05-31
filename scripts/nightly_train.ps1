@@ -8,6 +8,9 @@
     - Sets the working dir to the repo root.
     - Pipes all stdout/stderr to logs/nightly/<DATE>.log.
     - Calls ``uv run python scripts/nightly_train.py --sleep-after``.
+    - The Python orchestrator runs a pre-flight step first: stop stale
+      Fortuna Streamlit processes (DuckDB lock) and auto-tune n_envs on
+      low-RAM laptops.
     - Returns the orchestrator's exit code so Task Scheduler can record
       success/failure on the History tab.
 

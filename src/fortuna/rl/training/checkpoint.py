@@ -79,6 +79,11 @@ class PolicyCheckpoint:
     sb3_version: str = ""
     torch_version: str = ""
     notes: str = ""
+    baseline_sharpe: Optional[float] = None
+    beats_baseline: Optional[bool] = None
+    oos_fold_metrics: list[dict[str, Any]] = field(default_factory=list)
+    failure_modes: list[str] = field(default_factory=list)
+    advisory_ready: bool = False
 
     def __post_init__(self) -> None:
         if not self.created_at:
@@ -96,6 +101,8 @@ class PolicyCheckpoint:
         kwargs = {k: v for k, v in d.items() if k in cls.__dataclass_fields__}
         if isinstance(kwargs.get("oos_metrics"), dict):
             kwargs["oos_metrics"] = OOSMetricsSummary.from_dict(kwargs["oos_metrics"])
+        if "advisory_ready" not in d:
+            kwargs["advisory_ready"] = bool(d.get("verdict_passed", False))
         return cls(**kwargs)
 
     def write(self, path: str | Path) -> None:
@@ -104,3 +111,38 @@ class PolicyCheckpoint:
     @classmethod
     def read(cls, path: str | Path) -> "PolicyCheckpoint":
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+
+
+DEFAULT_MIN_ADVISORY_TRADES = 1
+
+
+def compute_advisory_ready(
+    cp: PolicyCheckpoint,
+    *,
+    min_trades: int = DEFAULT_MIN_ADVISORY_TRADES,
+) -> tuple[bool, list[str]]:
+    """Return whether a checkpoint is safe for live advisory RL overlay."""
+    failures: list[str] = []
+    if not cp.verdict_passed:
+        failures.append("verdict_failed")
+    if cp.oos_metrics.total_trades < min_trades:
+        failures.append("hold_locked")
+    if cp.beats_baseline is False:
+        failures.append("below_baseline")
+    return len(failures) == 0, failures
+
+
+def build_failure_modes(
+    cp: PolicyCheckpoint,
+    *,
+    min_trades: int = DEFAULT_MIN_ADVISORY_TRADES,
+) -> list[str]:
+    """Derive failure mode tags from checkpoint evaluation results."""
+    modes: list[str] = []
+    if not cp.verdict_passed:
+        modes.append("verdict_failed")
+    if cp.oos_metrics.total_trades < min_trades:
+        modes.append("hold_locked")
+    if cp.beats_baseline is False:
+        modes.append("below_baseline")
+    return modes

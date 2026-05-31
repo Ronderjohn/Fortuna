@@ -50,6 +50,7 @@ except Exception:  # noqa: BLE001 — older interpreters / non-TextIO wrappers.
 from fortuna.backtesting.standard.calendar import filter_session_bars  # noqa: F401,E402
 from fortuna.utils.keep_awake import activate as _keep_awake_activate  # noqa: E402
 from fortuna.utils.keep_awake import release as _keep_awake_release  # noqa: E402
+from fortuna.utils.nightly_preflight import run_nightly_preflight  # noqa: E402
 from fortuna.utils.runtime_env import apply_low_spec_gpu_defaults  # noqa: E402
 
 apply_low_spec_gpu_defaults()
@@ -310,7 +311,11 @@ def train_one_symbol(
     use_subproc: bool,
     checkpoint_root: Path,
 ) -> dict:
+    from fortuna.config.settings import get_settings
+    from fortuna.rl.evaluation.baseline import baseline_sharpe_for_symbol
+
     reward = _inherited_reward(symbol, timeframe, checkpoint_root)
+    baseline = baseline_sharpe_for_symbol(symbol, timeframe, settings=get_settings())
     # The backfill phase already wrote a fresh .FUT cache for the current
     # front-month contract earlier in this orchestrator run. The trainer
     # reads from that cache — issuing a third force_refresh here just
@@ -340,6 +345,7 @@ def train_one_symbol(
         eval_freq=25_000,
         early_stop_patience=8,
         seed=44,
+        baseline_sharpe=baseline,
     )
     trainer = FortunaRLTrainer(cfg)
     meta = trainer.train()
@@ -353,6 +359,9 @@ def train_one_symbol(
         "trades": int(meta.oos_metrics.total_trades),
         "win_rate": float(meta.oos_metrics.win_rate_pct),
         "reward_config": cfg.reward_config.to_dict(),
+        "advisory_ready": bool(meta.advisory_ready),
+        "baseline_sharpe": meta.baseline_sharpe,
+        "beats_baseline": meta.beats_baseline,
     }
 
 
@@ -408,9 +417,18 @@ def optimize_deterministic_strategies(
 # ----------------------------------------------------------- promotion / sleep
 
 
-def promote_best_per_symbol(models_root: Path) -> dict:
-    """For each symbol, promote the best (highest verdict_score) checkpoint
-    seen across validated+rejected into ``models/live/by_symbol/<sym>/``."""
+def promote_best_per_symbol(
+    models_root: Path,
+    *,
+    include_rejected: bool = False,
+) -> dict:
+    """For each symbol, promote the best checkpoint via live.json pointers.
+
+    By default only ``advisory_ready`` checkpoints are promoted.
+    """
+    from fortuna.models.metadata import PromotionRecord, PromotionStatus
+    from fortuna.models.promotion import promote
+
     best: dict[str, PolicyCheckpoint] = {}
     sources: dict[str, Path] = {}
     for sub in ("validated", "rejected"):
@@ -425,34 +443,41 @@ def promote_best_per_symbol(models_root: Path) -> dict:
                 cp = PolicyCheckpoint.read(meta)
             except Exception:  # noqa: BLE001
                 continue
+            if sub == "rejected" and not include_rejected:
+                continue
+            if not include_rejected and not cp.advisory_ready:
+                continue
             key = f"{cp.symbol}|{cp.timeframe}"
             if key not in best or cp.verdict_score > best[key].verdict_score:
                 best[key] = cp
                 sources[key] = run
 
-    live_root = models_root / "live" / "by_symbol"
-    live_root.mkdir(parents=True, exist_ok=True)
     promoted: list[dict] = []
     for key, cp in best.items():
-        sym_clean = cp.symbol.replace(".", "_")
-        target = live_root / sym_clean
-        if target.exists():
-            for f in target.iterdir():
-                f.unlink()
-        else:
-            target.mkdir(parents=True)
         src = sources[key]
-        for f in src.iterdir():
-            if f.is_file():
-                (target / f.name).write_bytes(f.read_bytes())
-        promoted.append({
-            "symbol": cp.symbol,
-            "run_id": cp.run_id,
-            "score": cp.verdict_score,
-            "passed": cp.verdict_passed,
-            "target": str(target),
-        })
-    return {"promoted": promoted, "count": len(promoted)}
+        record = PromotionRecord.from_rl_checkpoint(
+            cp,
+            src,
+            status=PromotionStatus.VALIDATED,
+        )
+        try:
+            ptr = promote(record, models_root=models_root, promoted_by="nightly")
+            promoted.append({
+                "symbol": cp.symbol,
+                "run_id": cp.run_id,
+                "score": cp.verdict_score,
+                "passed": cp.verdict_passed,
+                "pointer": str(ptr),
+            })
+        except ValueError as exc:
+            promoted.append({
+                "symbol": cp.symbol,
+                "run_id": cp.run_id,
+                "score": cp.verdict_score,
+                "passed": cp.verdict_passed,
+                "error": str(exc),
+            })
+    return {"promoted": promoted, "count": len([p for p in promoted if "pointer" in p])}
 
 
 def write_report(report: NightlyReport, out_dir: Path) -> Path:
@@ -538,6 +563,11 @@ def main() -> int:
     parser.add_argument("--report-dir", default="reports/nightly")
     parser.add_argument("--skip-regime", action="store_true")
     parser.add_argument("--skip-promote", action="store_true")
+    parser.add_argument(
+        "--promote-include-rejected",
+        action="store_true",
+        help="promote best checkpoint even when advisory_ready=False",
+    )
     parser.add_argument("--skip-deterministic", action="store_true",
                         help="skip PaperLeague walk-forward sweep on deterministic strategies")
     parser.add_argument("--strategy-dirs", nargs="*",
@@ -547,9 +577,16 @@ def main() -> int:
     parser.add_argument("--paper-league-output", default="logs/paper_league")
     parser.add_argument("--sleep-after", action="store_true",
                         help="suspend the Windows host after completion")
+    parser.add_argument("--skip-preflight", action="store_true",
+                        help="skip pre-flight Streamlit cleanup and RAM auto-tuning")
+    parser.add_argument("--no-auto-tune-envs", dest="auto_tune_envs",
+                        action="store_false", default=True,
+                        help="keep --n-envs / --use-subproc even on low-RAM laptops")
     parser.add_argument("--max-symbols", type=int, default=None,
                         help="cap basket size (useful for debugging)")
     args = parser.parse_args()
+
+    repo_root = Path(__file__).resolve().parents[1]
 
     cash_symbols = args.symbols[: args.max_symbols] if args.max_symbols else args.symbols
     if args.include_futures:
@@ -570,6 +607,27 @@ def main() -> int:
 
     report = NightlyReport(started_at=_now_iso(), basket=symbols)
     start = time.perf_counter()
+
+    if not args.skip_preflight:
+        logger.info("[nightly] === phase 0/5: pre-flight ===")
+        pf = run_nightly_preflight(
+            repo_root,
+            requested_n_envs=args.n_envs,
+            requested_use_subproc=args.use_subproc,
+            kill_streamlit=True,
+            auto_tune_envs=args.auto_tune_envs,
+        )
+        report.add(StepResult(
+            name="preflight",
+            status="ok",
+            started_at=_now_iso(),
+            ended_at=_now_iso(),
+            duration_s=0.0,
+            detail=pf.as_detail(),
+        ))
+        if args.auto_tune_envs:
+            args.n_envs = pf.n_envs
+            args.use_subproc = pf.use_subproc
 
     n_cash = sum(1 for s in symbols if not _is_rolling_future(s) and ".FUT" not in s.upper())
     n_fut = len(symbols) - n_cash
@@ -636,7 +694,12 @@ def main() -> int:
     # ---- Step 5: promotion
     if not args.skip_promote:
         logger.info("[nightly] === phase 5/5: promote best per symbol ===")
-        report.add(_timed("promote_best", promote_best_per_symbol, models_root))
+        report.add(_timed(
+            "promote_best",
+            promote_best_per_symbol,
+            models_root,
+            include_rejected=args.promote_include_rejected,
+        ))
 
     # ---- finalize
     report.ended_at = _now_iso()

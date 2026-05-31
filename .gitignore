@@ -57,6 +57,9 @@ logs/*
 models/
 !models/.gitkeep
 
+# Generated nightly / smoke reports.
+reports/
+
 # Local scratch notes / one-off command logs (not part of the repo).
 nightly_runs_cmds.txt
 
@@ -76,8 +79,4 @@ Phase_2.md
 .DS_Store
 Thumbs.db
 
-# ─── Logs ─────────────────────────────────────────────────────────────────
-logs/*
-!logs/README.md
-!logs/.gitkeep 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from fortuna.data.sources.smartapi_bar_aggregator import BarAggregator
 

@@ -6,7 +6,6 @@ from fortuna.app.parallel_runner import (
     ParallelStrategyRunner,
     StrategyRunResult,
 )
-from fortuna.app.session_engine import FortunaSessionEngine
 from fortuna.app.strategy_paths import list_strategy_paths
 from fortuna.app.symbol_catalog import SymbolCatalog
 
@@ -19,3 +18,11 @@ __all__ = [
     "list_strategy_paths",
     "SymbolCatalog",
 ]
+
+
+def __getattr__(name: str):
+    if name == "FortunaSessionEngine":
+        from fortuna.app.session_engine import FortunaSessionEngine
+
+        return FortunaSessionEngine
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

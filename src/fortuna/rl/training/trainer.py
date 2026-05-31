@@ -17,6 +17,9 @@ from fortuna.backtesting.standard.config import MarketCostModel
 from fortuna.backtesting.standard.filters import FilterVerdict
 from fortuna.config.settings import Settings, get_settings
 from fortuna.data.manager import MarketDataManager
+from fortuna.features.builder import FeatureBuilder
+from fortuna.features.position import PositionState
+from fortuna.features.rl_indicators import enrich_for_rl
 from fortuna.paper.blackbox import WalkForwardFold, walk_forward_folds
 from fortuna.reporting.strategy_tester.metrics import compute_all_metrics
 from fortuna.reporting.strategy_tester.trade import TradeRecord, TradeSide
@@ -25,16 +28,17 @@ from fortuna.rl.env.actions import (
     ACTION_ENTER_SHORT,
     ACTION_EXIT_LONG,
     ACTION_EXIT_SHORT,
-    ACTION_HOLD,
 )
 from fortuna.rl.env.reward import RewardConfig
 from fortuna.rl.env.session import is_squareoff_time
-from fortuna.rl.env.trading_env import FortunaTradingEnv
+from fortuna.rl.evaluation.baseline import baseline_sharpe_for_symbol
 from fortuna.rl.training.callbacks import FortunaEvalCallback, TensorboardCallback
-from fortuna.rl.training.checkpoint import OOSMetricsSummary, PolicyCheckpoint
-from fortuna.features.builder import FeatureBuilder
-from fortuna.features.position import PositionState
-from fortuna.features.rl_indicators import enrich_for_rl
+from fortuna.rl.training.checkpoint import (
+    OOSMetricsSummary,
+    PolicyCheckpoint,
+    build_failure_modes,
+    compute_advisory_ready,
+)
 from fortuna.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -321,9 +325,21 @@ class FortunaRLTrainer:
                 pass
 
         # OOS evaluation on all eval folds with deterministic policy.
-        oos_metrics, n_trades_total = self.evaluate(model, eval_folds)
+        oos_metrics, fold_summaries, n_trades_total = self.evaluate(model, eval_folds)
         period_days = max(1, len(eval_folds) * self.cfg.test_bars // 75)
         verdict = FilterVerdict.evaluate(oos_metrics, period_days=period_days)
+
+        baseline_sharpe = self.cfg.baseline_sharpe
+        if baseline_sharpe is None:
+            baseline_sharpe = baseline_sharpe_for_symbol(
+                self.cfg.symbol,
+                self.cfg.timeframe,
+                settings=self.settings,
+            )
+        oos_sharpe = float(oos_metrics.risk.sharpe_ratio)
+        beats_baseline: Optional[bool] = None
+        if baseline_sharpe is not None:
+            beats_baseline = oos_sharpe >= float(baseline_sharpe)
 
         # Package + persist checkpoint.
         meta = PolicyCheckpoint(
@@ -348,7 +364,12 @@ class FortunaRLTrainer:
             sb3_version=_pkg_version("stable_baselines3"),
             torch_version=torch.__version__,
             notes=f"n_eval_trades={n_trades_total}",
+            baseline_sharpe=baseline_sharpe,
+            beats_baseline=beats_baseline,
+            oos_fold_metrics=[m.to_dict() for m in fold_summaries],
         )
+        meta.failure_modes = build_failure_modes(meta)
+        meta.advisory_ready, _ = compute_advisory_ready(meta)
 
         dest_root = "validated" if verdict.passed else "rejected"
         final_dir = Path(self.cfg.checkpoint_dir) / dest_root / run_id
@@ -420,9 +441,10 @@ class FortunaRLTrainer:
         self,
         model: PPO,
         eval_folds: list[WalkForwardFold],
-    ) -> tuple[Any, int]:
+    ) -> tuple[Any, list[OOSMetricsSummary], int]:
         """Run the deterministic policy over OOS folds and return aggregated metrics."""
         trades: list[TradeRecord] = []
+        fold_summaries: list[OOSMetricsSummary] = []
         capital = 100_000.0
 
         builder = FeatureBuilder(n_bars=self.cfg.n_bars, warmup_bars=self.cfg.warmup_bars)
@@ -432,6 +454,7 @@ class FortunaRLTrainer:
             if len(enriched) <= self.cfg.n_bars + 1:
                 continue
 
+            fold_trades: list[TradeRecord] = []
             builder.reset()
             position = PositionState()
             empty_pos = PositionState()
@@ -456,19 +479,25 @@ class FortunaRLTrainer:
                 elif action == ACTION_ENTER_SHORT and position.is_flat:
                     position.open_short(price, timestamp)
                 elif action == ACTION_EXIT_LONG and position.is_long:
-                    self._close_to_trade(trades, position, price, timestamp)
+                    self._close_to_trade(fold_trades, position, price, timestamp)
                 elif action == ACTION_EXIT_SHORT and position.is_short:
-                    self._close_to_trade(trades, position, price, timestamp)
+                    self._close_to_trade(fold_trades, position, price, timestamp)
 
                 position.step()
 
             # Close any lingering position at fold end.
             if position.is_open:
                 last_row = enriched.iloc[-1]
-                self._close_to_trade(trades, position, float(last_row["close"]), last_row.name)
+                self._close_to_trade(
+                    fold_trades, position, float(last_row["close"]), last_row.name
+                )
+
+            fold_metrics, _ = compute_all_metrics(fold_trades, capital)
+            fold_summaries.append(OOSMetricsSummary.from_strategy_metrics(fold_metrics))
+            trades.extend(fold_trades)
 
         metrics, _ = compute_all_metrics(trades, capital)
-        return metrics, len(trades)
+        return metrics, fold_summaries, len(trades)
 
     def _close_to_trade(
         self,
