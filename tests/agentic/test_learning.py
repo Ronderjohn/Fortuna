@@ -38,7 +38,12 @@ def _ohlcv(closes: list[float], freq: str = "5min") -> pd.DataFrame:
     )
 
 
-def _decision(action: ActionRecommendation, *, bar_time: datetime | None = None) -> AgentDecision:
+def _decision(
+    action: ActionRecommendation,
+    *,
+    bar_time: datetime | None = None,
+    regime: str | None = None,
+) -> AgentDecision:
     ts = bar_time or datetime(2026, 1, 6, 9, 30)
     return AgentDecision(
         symbol="RELIANCE.NS",
@@ -47,6 +52,7 @@ def _decision(action: ActionRecommendation, *, bar_time: datetime | None = None)
         bar_time=ts,
         bar_close=100.0,
         rationale=DecisionRationale(summary="test"),
+        regime=regime,
     )
 
 
@@ -83,6 +89,19 @@ def test_append_pending_stores_bar_idx(tmp_path: Path):
     pending = store.unresolved(symbol="RELIANCE.NS")
     assert len(pending) == 1
     assert pending[0].decision_hash == decision.decision_hash
+
+
+def test_append_pending_persists_regime_metadata(tmp_path: Path):
+    store = AgenticLearningStore(tmp_path)
+    ohlcv = _ohlcv([100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0])
+    decision = _decision(
+        ActionRecommendation.BUY,
+        bar_time=ohlcv.index[2].to_pydatetime(),
+        regime="TRENDING",
+    )
+    row = store.append_pending(decision, timeframe="5m", ohlcv=ohlcv)
+    assert row is not None
+    assert row.metadata["regime"] == "TRENDING"
 
 
 def test_hold_not_appended(tmp_path: Path):

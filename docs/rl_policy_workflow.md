@@ -66,10 +66,36 @@ Manual per-symbol or global:
 ```powershell
 uv run python scripts/promote_model.py --kind rl_policy --run-id <run_id>
 uv run python scripts/promote_policy.py --run-id <run_id> --symbol RELIANCE.NS
+uv run python scripts/promote_model.py --kind rl_policy --run-id <run_id> --workflow-snapshot reports/nightly/workflow_snapshot.json
 ```
 
 Nightly pipeline (`scripts/nightly_train.py`) promotes best `advisory_ready` checkpoint
-per symbol via pointer files (not full artifact copies).
+per symbol via pointer files (not full artifact copies). Candidate-driven
+nightly runs can emit a workflow snapshot artifact, and those nightly
+promotions now carry that snapshot path into the live pointer payload and
+`models/registry/promotions.jsonl` audit.
+When a workflow snapshot is supplied on the promotion CLI, the command also
+prints a compact summary of the originating universe / shortlist / briefing /
+training-candidate counts for quicker manual review.
+
+For a fuller operator review after promotion:
+
+```powershell
+uv run python scripts/review_promotion.py --kind rl_policy --symbol RELIANCE.NS
+```
+
+That review pulls the promoted pointer payload, key OOS metrics, promotion
+reasons, and linked workflow summary into one output.
+
+To archive the review as an artifact:
+
+```powershell
+uv run python scripts/review_promotion.py --kind rl_policy --symbol RELIANCE.NS --out reports/promotion_review.md --format md
+```
+
+Nightly runs can now do this automatically after successful promotion, placing
+review artifacts under the nightly report directory's `promotions/` folder by
+default.
 
 When registry is enabled:
 
@@ -79,6 +105,23 @@ FORTUNA_MODEL_PROMOTION_REQUIRED=1
 ```
 
 Missing live pointer → no RL load for that symbol; deterministic signals continue.
+
+## Activation path (trained → promoted → active)
+
+Fortuna surfaces a typed activation stage per lane via `build_lane_activation_summary()`:
+
+1. **Train** — artifact lands under `models/validated/<run_id>/` (or ML `ml_signal_scorer/validated/`).
+2. **Promote** — `promote_policy.py` / `promote_model.py` writes the live pointer when registry is strict.
+3. **Load** — session engine loads the pointer on dashboard start or **Reload policy** / **Reload ML scorer**.
+4. **Active** — loaded generator/scorer with `advisory_ready` metadata participates in agentic votes.
+
+Check current stage without a promotion audit row:
+
+```powershell
+uv run python scripts/review_promotion.py --kind rl_policy --symbol RELIANCE.NS --activation-only
+```
+
+Stages: `disabled`, `missing_artifact`, `unpromoted`, `promoted_not_advisory_ready`, `not_loaded`, `active`.
 
 ## Live inference
 

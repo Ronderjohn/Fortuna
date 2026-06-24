@@ -101,6 +101,43 @@ def test_fetch_retries_on_rate_limit() -> None:
     assert len(df) == 1
 
 
+def test_fetch_preserves_open_interest_when_candles_include_it() -> None:
+    settings = SmartAPISettings(
+        api_key="k",
+        client_code="C",
+        password="p",
+        totp_secret="JBSWY3DPEHPK3PXP",
+    )
+    inst = InstrumentRef(
+        symbol="RELIANCE.FUT",
+        tradingsymbol="RELIANCE30JUN26FUT",
+        symboltoken="5001",
+        exchange="NFO",
+        instrumenttype="FUTSTK",
+    )
+    registry = MagicMock(spec=InstrumentRegistry)
+    registry.resolve.return_value = inst
+    fake_response = {
+        "status": True,
+        "data": [
+            ["2024-01-02 09:15:00", 100.0, 101.0, 99.0, 100.5, 1000, 25000],
+            ["2024-01-02 09:20:00", 100.5, 102.0, 100.0, 101.0, 1200, 25200],
+        ],
+    }
+    session = MagicMock(spec=SmartAPISession)
+    session.get_tokens.return_value = MagicMock(jwt_token="jwt")
+
+    src = SmartAPIHistoricalSource(session=session, registry=registry, settings=settings)
+    with patch(
+        "fortuna.data.sources.smartapi_rest.get_candle_data",
+        return_value=fake_response,
+    ):
+        df = src.fetch("RELIANCE.FUT", "5m", days=1)
+
+    assert "open_interest" in df.columns
+    assert float(df["open_interest"].iloc[-1]) == 25200.0
+
+
 def test_fetch_strips_bearer_prefix_from_sdk_jwt() -> None:
     """Regression test: SDK login returns 'Bearer <jwt>'. The REST helper adds
     its own 'Bearer ' prefix, so without stripping the Authorization header

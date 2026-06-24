@@ -9,6 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fortuna.app.training_candidates import (  # noqa: E402
+    load_training_candidates_manifest,
+    select_training_symbols,
+)
 from fortuna.backtesting.standard.calendar import filter_session_bars  # noqa: E402,F401
 from fortuna.config.settings import Settings  # noqa: E402
 from fortuna.data.manager import MarketDataManager  # noqa: E402
@@ -25,7 +29,18 @@ from fortuna.models.promotion import compute_ml_advisory_ready  # noqa: E402
 def main() -> int:
     parser = argparse.ArgumentParser(description="Train Fortuna ML signal scorer")
     parser.add_argument("--config", default="", help="Optional YAML config path")
-    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--symbol", default="")
+    parser.add_argument(
+        "--candidate-manifest",
+        default="",
+        help="Optional shortlist-driven training candidate manifest JSON",
+    )
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=1,
+        help="How many ML candidate symbols to train from the manifest",
+    )
     parser.add_argument("--timeframe", default="5m")
     parser.add_argument("--strategy-name", default="agentic")
     parser.add_argument("--learning-dir", default="logs/agentic")
@@ -39,26 +54,50 @@ def main() -> int:
     args = parser.parse_args()
 
     settings = Settings.from_yaml(Path(args.config) if args.config else None)
+    symbols = _resolve_ml_symbols(args)
+    if not symbols:
+        raise SystemExit("Provide --symbol or --candidate-manifest")
+    output_base = settings.resolve_path(Path(args.output_dir))
+    status = 0
+    for symbol in symbols:
+        try:
+            _train_one_symbol(settings, args, symbol, output_base)
+        except Exception as exc:  # noqa: BLE001
+            status = 1
+            print(f"[ML] {symbol} failed: {exc}")
+    return status
+
+
+def _resolve_ml_symbols(args) -> list[str]:
+    if str(args.symbol or "").strip():
+        return [str(args.symbol).strip()]
+    if str(args.candidate_manifest or "").strip():
+        manifest = load_training_candidates_manifest(Path(args.candidate_manifest))
+        return select_training_symbols(manifest, target="ml", top_n=args.top_n)
+    return []
+
+
+def _train_one_symbol(settings: Settings, args, symbol: str, output_base: Path) -> None:
     learning_rows_path = settings.resolve_path(Path(args.learning_dir)) / "learning_rows.jsonl"
     rows = load_learning_rows(
         learning_rows_path,
-        symbol=args.symbol,
+        symbol=symbol,
         timeframe=args.timeframe,
     )
     mdm = MarketDataManager(settings=settings)
-    ohlcv = mdm.get_ohlcv(args.symbol, args.timeframe, days=args.days, force_refresh=False)
+    ohlcv = mdm.get_ohlcv(symbol, args.timeframe, days=args.days, force_refresh=False)
     dataset = build_dataset_from_learning_rows(
         rows,
         ohlcv,
         eval_fraction=float(args.eval_fraction),
     )
 
-    run_id = args.run_id or default_run_id(args.symbol, args.timeframe)
+    run_id = args.run_id or default_run_id(symbol, args.timeframe)
     label_config = LabelConfig(horizon_bars=int(args.horizon_bars))
     scorer = SignalScorer(random_state=int(args.seed))
     meta = ScorerMetadata(
         run_id=run_id,
-        symbol=args.symbol,
+        symbol=symbol,
         timeframe=args.timeframe,
         strategy_name=args.strategy_name,
         label_config=label_config,
@@ -78,7 +117,6 @@ def main() -> int:
     scorer.metadata.verdict_reasons = list(reasons)
     scorer.metadata.advisory_ready = ready
 
-    output_base = settings.resolve_path(Path(args.output_dir))
     artifact_dir = output_base / run_id
     scorer.save(artifact_dir)
 
@@ -89,7 +127,7 @@ def main() -> int:
     print(f"     Advisory:      {scorer.metadata.advisory_ready}")
     if scorer.metadata.verdict_reasons:
         print(f"     Reasons:       {', '.join(scorer.metadata.verdict_reasons)}")
-    return 0
+    print(f"     Symbol:        {symbol}")
 
 
 if __name__ == "__main__":

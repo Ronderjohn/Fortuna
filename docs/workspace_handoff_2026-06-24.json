@@ -1,0 +1,48 @@
+{
+  "prepared_on": "2026-06-24",
+  "workspace_path": "C:\\dev\\Fortuna",
+  "branch": "Phase_2",
+  "base_commit": "da1cf61d0def7d82297525a0b3f1241532d435c6",
+  "remote": {
+    "name": "origin",
+    "url": "https://github.com/Ronderjohn/Fortuna.git"
+  },
+  "toolchain": {
+    "python": "3.12.10",
+    "uv": "0.11.16"
+  },
+  "priority_docs": [
+    "AGENTS.md",
+    "README.md",
+    "docs/how_to_use_fortuna.md",
+    "docs/operator_runbook.md",
+    "docs/current_system_flow.md",
+    "docs/first_run.md"
+  ],
+  "active_workstreams": [
+    "telegram_assistant_and_runtime",
+    "agentic_openai_routing_and_chart_analysis",
+    "market_universe_and_training_research",
+    "portfolio_allocator_and_nightly_acceptance",
+    "observability",
+    "documentation_refresh"
+  ],
+  "recommended_checks": [
+    "uv sync",
+    "uv run pytest tests/agentic -q",
+    "uv run pytest tests/execution/test_session_wiring.py -q",
+    "uv run pytest tests/app -q",
+    "uv run ruff check src tests"
+  ],
+  "archive_guidance": {
+    "contains_sensitive_files": true,
+    "sensitive_paths": [
+      ".env"
+    ],
+    "safe_to_rebuild": [
+      ".venv",
+      ".pytest_cache",
+      ".ruff_cache"
+    ]
+  }
+}

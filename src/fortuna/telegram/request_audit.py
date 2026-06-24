@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from fortuna.agentic.redaction import redact_secrets
 from fortuna.config.settings import Settings
 from fortuna.telegram.assistant import InteractionResult
 
@@ -38,6 +39,9 @@ class TelegramRequestAuditEntry:
     resolved_symbol: str | None = None
     decision_action: str | None = None
     hit_count: int | None = None
+    modality: str = "text"
+    attachment_kind: str | None = None
+    forecast_used: bool | None = None
     response_chars: int = 0
     delivery_ok: bool | None = None
     delivery_error: str | None = None
@@ -61,6 +65,34 @@ class TelegramRequestAuditStore:
     def read_recent(self, limit: int = 50) -> list[dict[str, Any]]:
         return _read_jsonl(self.path, limit=limit)
 
+    def apply_retention(self, *, keep_count: int, keep_days: int) -> int:
+        rows = _read_jsonl(self.path)
+        if not rows:
+            return 0
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, int(keep_days)))
+        kept: list[dict[str, Any]] = []
+        pruned = 0
+        for row in rows:
+            ts = str(row.get("ts", "") or "")
+            keep = True
+            if ts:
+                try:
+                    keep = datetime.fromisoformat(ts) >= cutoff
+                except ValueError:
+                    keep = True
+            if keep:
+                kept.append(row)
+            else:
+                pruned += 1
+        if len(kept) > keep_count:
+            pruned += len(kept) - keep_count
+            kept = kept[-keep_count:]
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("w", encoding="utf-8") as f:
+            for row in kept:
+                f.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+        return pruned
+
     def _append(self, payload: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as f:
@@ -78,7 +110,10 @@ def build_audit_entry(
 ) -> TelegramRequestAuditEntry:
     req = interaction.request
     route = interaction.route
-    raw_text = req.raw_text
+    raw_text = redact_secrets(
+        req.raw_text,
+        enabled=True,
+    )
     if len(raw_text) > _RAW_TEXT_MAX:
         raw_text = raw_text[:_RAW_TEXT_MAX]
 
@@ -108,6 +143,13 @@ def build_audit_entry(
         resolved_symbol=interaction.resolved_symbol,
         decision_action=interaction.decision_action,
         hit_count=interaction.hit_count,
+        modality=str(getattr(interaction, "modality", "text") or "text"),
+        attachment_kind=getattr(interaction, "attachment_kind", None),
+        forecast_used=(
+            bool(interaction.signal_response.forecast_used)
+            if interaction.signal_response is not None
+            else None
+        ),
         response_chars=len(interaction.reply),
         delivery_ok=delivery_ok,
         delivery_error=delivery_error,

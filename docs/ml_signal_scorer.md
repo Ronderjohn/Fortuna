@@ -103,9 +103,29 @@ mtime under `validated/` is used (legacy behavior).
 
 ```powershell
 uv run python scripts/promote_model.py --kind ml_scorer --run-id my_run_001
+uv run python scripts/promote_model.py --kind ml_scorer --run-id my_run_001 --workflow-snapshot reports/nightly/workflow_snapshot.json
 ```
 
 Writes a live pointer and audit entry under `models/registry/promotions.jsonl`.
+When supplied, `--workflow-snapshot` links the promoted scorer back to the
+shortlist/briefing/candidate artifact that informed the training/promotion run.
+The promotion command also prints the same compact workflow summary so manual
+review output lines up with dashboard model-health context.
+
+For a fuller operator review after promotion:
+
+```powershell
+uv run python scripts/review_promotion.py --kind ml_scorer
+```
+
+That review pulls the promoted pointer payload, scorer OOS metrics, promotion
+reasons, and linked workflow summary into one output.
+
+To archive the review as an artifact:
+
+```powershell
+uv run python scripts/review_promotion.py --kind ml_scorer --out reports/promotion_review_ml.md --format md
+```
 
 ## Disabling
 

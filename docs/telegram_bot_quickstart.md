@@ -9,9 +9,9 @@ If you want the deeper implementation and setup notes, read
 
 The bot lets you:
 
-- search for a stock/future/options contract
-- ask Fortuna for its current advisory read
-- get back the main action, confidence, reasons, and current action plan
+- search for a stock, future, or options contract
+- ask Fortuna for a current signal
+- get back a short verdict, confidence, reasons, risk, and next action
 
 It is an advisory interface, not a broker execution bot.
 
@@ -23,7 +23,10 @@ In `.env`, keep these enabled:
 FORTUNA_AGENTIC_ENABLED=1
 FORTUNA_TELEGRAM_ENABLED=1
 FORTUNA_TELEGRAM_BOT_TOKEN=...
-FORTUNA_TELEGRAM_CHAT_ID=...
+FORTUNA_TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
+FORTUNA_TELEGRAM_ADMIN_CHAT_IDS=123456789
+FORTUNA_SIGNAL_REPLY_STYLE=compact
+FORTUNA_SIGNAL_RL_MODE=warm
 FORTUNA_EXECUTION_ENABLED=0
 ```
 
@@ -114,17 +117,14 @@ For options:
 
 ## 6. How to read the reply
 
-A reply usually includes:
+A default reply usually includes:
 
 - resolved symbol
-- segment
-- timeframe and lookback
-- last bar close
-- final decision
+- final verdict
 - confidence
 - key reasons
 - risk notes
-- action plan
+- next action
 
 Interpretation:
 
@@ -160,13 +160,14 @@ Interpretation:
 
 ```text
 /analyze ICICIBANK 15m 20d
+What about 5m?
 ```
 
 ## 8. What the bot does not do
 
 - it does not place live trades by default
-- it does not replace the dashboard for deeper inspection
-- it does not work best with vague natural-language prompts
+- it keeps the dashboard for deeper operator inspection
+- it still works best with instrument-aware prompts
 - it does not infer a full option chain strategy from a loose sentence
 
 The more specific the instrument request, the better the output.
@@ -177,7 +178,7 @@ Check:
 
 1. `uv run python scripts/run_operator_preflight.py`
 2. whether the bot process is running
-3. whether your chat id matches the configured Telegram chat id
+3. whether your chat id is in `FORTUNA_TELEGRAM_ALLOWED_CHAT_IDS`
 4. whether the symbol/contract is valid in the loaded instrument master
 
 Common bad → good fixes:

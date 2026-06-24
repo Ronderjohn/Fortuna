@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +24,26 @@ maybe_disable_ssl_verification()
 
 import streamlit as st
 
+from fortuna.app.assistant_presets import (
+    build_dashboard_assistant_actions,
+    build_dashboard_assistant_examples,
+)
+from fortuna.app.acceptance_bundle import build_and_export_acceptance_bundle
 from fortuna.app.config import AppConfig
+from fortuna.app.operator_workflow import (
+    annotate_artifact_recovery_posture,
+    annotate_discovery_refresh,
+    export_workflow_snapshot,
+    replace_workflow_snapshot_sections,
+    summarize_market_universe,
+    summarize_multi_agent_workflow,
+    summarize_portfolio_allocation,
+    summarize_shortlist_analysis,
+    summarize_shortlist_briefing,
+    summarize_training_candidates,
+    summarize_training_research,
+    WorkflowSnapshot,
+)
 from fortuna.app.presentation import (
     export_leaderboard_csv,
     render_leaderboard,
@@ -33,10 +53,24 @@ from fortuna.app.presentation import (
     render_strategy_comparison_grid,
     render_strategy_report_card,
 )
+from fortuna.app.promotion_review import build_and_export_promotion_review
+from fortuna.app.multi_agent_team import replace_workflow_universe
+from fortuna.app.nightly_alignment_view import (
+    format_latest_nightly_discovery_context,
+    format_latest_nightly_execution_posture,
+)
 from fortuna.app.session_engine import FortunaSessionEngine
 from fortuna.app.symbol_catalog import SymbolCatalog
+from fortuna.app.workflow_artifacts import (
+    artifact_follow_up_prefers_discovery,
+    artifact_follow_up_refresh_target,
+    artifact_follow_up_team_posture,
+    build_workflow_artifact_follow_up,
+    build_workflow_artifact_rows,
+)
 from fortuna.config.settings import load_settings
 from fortuna.config.smartapi_settings import get_smartapi_settings
+from fortuna.models.metadata import ModelKind
 
 _TV_CSS = """
 <style>
@@ -179,6 +213,11 @@ def get_stream_port() -> int:
 
     def provider(*, symbol: str, timeframe: str, strategy: str, since: float) -> dict:
         eng = get_engine()
+        if eng.is_live():
+            try:
+                eng.poll_live()
+            except Exception:
+                pass
         state = eng.state
         if not state or state.symbol != symbol or state.timeframe != timeframe:
             return {"bars": [], "markers": [], "overlays": [], "last": 0}
@@ -186,30 +225,35 @@ def get_stream_port() -> int:
         if df is None or df.empty:
             return {"bars": [], "markers": [], "overlays": [], "last": 0}
 
-        closed = state.ohlcv
-        max_closed_unix = (
-            ist_unix_seconds(pd.Timestamp(closed.index[-1]))
-            if closed is not None and not closed.empty
-            else 0
-        )
-
         tail = df.tail(60)
         cutoff = int(since)
-        bars: list[dict] = []
+        bars_by_time: dict[int, dict] = {}
         for ts, row in tail.iterrows():
             t = ist_unix_seconds(pd.Timestamp(ts))
             if t < cutoff:
                 continue
-            # Never stream a bar older than the last closed candle (stale forming bucket).
-            if max_closed_unix and t < max_closed_unix:
-                continue
-            bars.append({
+            bars_by_time[t] = {
                 "time": t,
                 "open": float(row["open"]),
                 "high": float(row["high"]),
                 "low": float(row["low"]),
                 "close": float(row["close"]),
-            })
+            }
+        # Always include the latest candle (forming bar in-place updates use the
+        # same or a newer timestamp) so live ticks reach the chart even when
+        # ``since`` would otherwise filter them out.
+        if not df.empty:
+            ts = df.index[-1]
+            t = ist_unix_seconds(pd.Timestamp(ts))
+            row = df.iloc[-1]
+            bars_by_time[t] = {
+                "time": t,
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+            }
+        bars = [bars_by_time[k] for k in sorted(bars_by_time)]
 
         markers = _build_stream_markers(state, strategy)
 
@@ -253,6 +297,28 @@ def _init_session_state(settings) -> None:
         st.session_state.symbol_dialog_open = False
     if "search_query" not in st.session_state:
         st.session_state.search_query = ""
+    if "_live_on_prev" not in st.session_state:
+        st.session_state._live_on_prev = None
+
+
+def _try_start_live(engine: FortunaSessionEngine, *, show_error: bool = True) -> bool:
+    """Start SmartAPI WebSocket feed; return True when running."""
+    if engine.is_live():
+        return True
+    if engine.state.ohlcv is None:
+        return False
+    try:
+        engine.start_live()
+        return engine.is_live()
+    except Exception as e:
+        if show_error:
+            st.error(f"Live feed failed: {e}")
+        return False
+
+
+def _try_stop_live(engine: FortunaSessionEngine) -> None:
+    if engine.is_live():
+        engine.stop_live()
 
 
 @st.dialog("Symbol search — NSE + NFO", width="large")
@@ -328,11 +394,13 @@ def _run_load(
     if state.batch and state.batch.winner:
         st.session_state.chart_strat = state.batch.winner
     st.session_state.chart_context = f"{symbol}_{timeframe}"
+    st.session_state.load_params = (symbol, timeframe, int(days))
     if live_on:
-        try:
-            engine.start_live()
-        except Exception as e:
-            st.sidebar.error(f"Live feed: {e}")
+        if not _try_start_live(engine):
+            st.warning(
+                "Live is checked but the WebSocket feed did not start. "
+                "Confirm **SMARTAPI_USE_LIVE_FEED=true** in `.env`, then re-run **Analyze**."
+            )
 
 
 def main() -> None:
@@ -349,6 +417,7 @@ def main() -> None:
         st.info("Copy `.env.example` to `.env` and set Angel One SmartAPI credentials.")
         st.stop()
 
+    get_smartapi_settings.cache_clear()
     settings = load_settings()
     app_cfg = AppConfig.from_settings()
     _init_session_state(settings)
@@ -382,32 +451,69 @@ def main() -> None:
         with c_tf:
             from fortuna.data.timeframes import TRADINGVIEW_INTERVALS, interval_label
 
+            loaded_tf = engine.state.timeframe if engine.state.ohlcv is not None else settings.default_timeframe
+            if loaded_tf not in TRADINGVIEW_INTERVALS:
+                loaded_tf = "5m"
             timeframe = st.selectbox(
                 "Interval",
                 TRADINGVIEW_INTERVALS,
-                index=TRADINGVIEW_INTERVALS.index("5m"),
+                index=TRADINGVIEW_INTERVALS.index(loaded_tf),
                 format_func=interval_label,
                 label_visibility="visible",
             )
         with c_days:
-            days = st.number_input("History (days)", min_value=7, max_value=90, value=settings.default_days)
+            loaded_days = int(engine.state.days) if engine.state.ohlcv is not None else int(settings.default_days)
+            days = st.number_input(
+                "History (days)",
+                min_value=7,
+                max_value=90,
+                value=loaded_days,
+            )
         with c_force:
             force = st.checkbox("Refresh data", value=False)
         with c_live:
             live_on = st.checkbox("Live", value=_is_nse_session())
-            if live_on and not get_smartapi_settings().use_live_feed:
-                st.caption("Set SMARTAPI_USE_LIVE_FEED=true")
+            smart = get_smartapi_settings()
+            if live_on and not smart.use_live_feed:
+                st.caption("Set SMARTAPI_USE_LIVE_FEED=true in `.env` and refresh")
+            elif live_on and smart.use_live_feed:
+                st.caption("WebSocket snap quotes · NSE session")
+        prev_live = st.session_state.get("_live_on_prev")
+        if prev_live is not None and prev_live != live_on:
+            st.session_state._live_on_prev = live_on
+            if live_on and engine.state.ohlcv is not None and _is_nse_session():
+                if _try_start_live(engine):
+                    st.toast("Live feed started.", icon="📡")
+            elif not live_on:
+                _try_stop_live(engine)
+            st.rerun()
+        st.session_state._live_on_prev = live_on
         with c_load:
             st.write("")
             load_clicked = st.button("Analyze", type="primary", use_container_width=True)
 
-    if load_clicked or st.session_state.get("trigger_load"):
+    symbol = st.session_state.selected_symbol
+    load_params = (symbol, timeframe, int(days))
+    prior_params = st.session_state.get("load_params")
+    params_changed = (
+        st.session_state.get("loaded")
+        and prior_params is not None
+        and prior_params != load_params
+    )
+    if params_changed:
+        st.info(
+            f"Interval or history changed — reloading **{symbol}** at **{timeframe}** "
+            f"({int(days)} days)…"
+        )
+
+    if load_clicked or st.session_state.get("trigger_load") or params_changed:
+        reload_force = force or params_changed
         _run_load(
             engine,
-            st.session_state.selected_symbol,
+            symbol,
             timeframe,
             int(days),
-            force,
+            reload_force,
             live_on,
         )
 
@@ -440,6 +546,12 @@ def main() -> None:
 
             new_ts = engine.state.last_bar_time
             sig_age = engine.state.last_signal_refresh
+            stats = engine.live_stats()
+            tick_n = int(stats.get("tick_count") or 0)
+            last_tick = stats.get("last_tick_at")
+            tick_age = ""
+            if isinstance(last_tick, (int, float)):
+                tick_age = f" · {max(0, int(time.monotonic() - last_tick))}s since tick"
 
             label = f"{new_ts:%H:%M}" if new_ts is not None else "waiting"
             sig_suffix = (
@@ -448,17 +560,21 @@ def main() -> None:
             st.markdown(
                 "<div style='background:#0e8345;color:#fff;padding:4px 12px;"
                 "border-radius:6px;display:inline-block;font-weight:600;"
-                f"font-size:0.85rem;'>📡 LIVE · last bar {label}{sig_suffix}</div>",
+                f"font-size:0.85rem;'>📡 LIVE · {tick_n} ticks · last bar {label}"
+                f"{tick_age}{sig_suffix}</div>",
                 unsafe_allow_html=True,
             )
 
         _live_pulse()
     elif live_on and engine.state.ohlcv is not None and _is_nse_session():
-        try:
-            engine.start_live()
+        if get_smartapi_settings().use_live_feed and _try_start_live(engine, show_error=False):
             st.toast("Live feed auto-started — market is open.", icon="📡")
-        except Exception as e:
-            st.sidebar.warning(f"Live feed unavailable: {e}")
+            st.rerun()
+        else:
+            st.warning(
+                "Live is enabled but the feed is not connected. "
+                "Check **SMARTAPI_USE_LIVE_FEED=true** and click **Analyze** again."
+            )
 
     state = engine.state
     if state.ohlcv is None or state.batch is None:
@@ -485,15 +601,21 @@ def main() -> None:
 
     render_ohlcv_ticker(ohlcv, state.symbol, state.timeframe)
 
-    m1, m2, m3, m4, m5 = st.columns(5)
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("Bars", f"{len(ohlcv):,}")
-    m2.metric("From", str(ohlcv.index.min().date()))
-    m3.metric("To", str(ohlcv.index.max().date()))
-    m4.metric("Strategies", len(batch.results))
+    m2.metric("Interval", state.timeframe)
+    m3.metric("From", str(ohlcv.index.min().date()))
+    m4.metric("To", str(ohlcv.index.max().date()))
+    m5.metric("Strategies", len(batch.results))
     live_label = "ON" if engine.is_live() else "OFF"
-    if engine.is_live() and state.last_bar_time is not None:
-        live_label = f"ON · {state.last_bar_time:%H:%M}"
-    m5.metric("Live", live_label)
+    if engine.is_live():
+        stats = engine.live_stats()
+        tick_n = int(stats.get("tick_count") or 0)
+        if state.last_bar_time is not None:
+            live_label = f"ON · {state.last_bar_time:%H:%M} · {tick_n} ticks"
+        else:
+            live_label = f"ON · {tick_n} ticks"
+    m6.metric("Live", live_label)
 
     render_strategy_comparison_grid(batch)
     render_live_signal_panel(live_signals, winner=winner)
@@ -561,6 +683,7 @@ def main() -> None:
                     title=strat,
                     height=560,
                     visible_bars=vb,
+                    timeframe=state.timeframe,
                 )
                 if spec:
                     # Hand the iframe a polling URL. The JS inside the iframe
@@ -568,25 +691,31 @@ def main() -> None:
                     # every couple of seconds and applies them in-place via
                     # series.update() — preserving zoom/pan (TV-style stream).
                     stream_url = None
-                    try:
-                        port = get_stream_port()
-                        from urllib.parse import urlencode
+                    if engine.is_live() and _is_nse_session():
+                        try:
+                            port = get_stream_port()
+                            from urllib.parse import urlencode
 
-                        qs = urlencode({
-                            "symbol": state.symbol,
-                            "tf": state.timeframe,
-                            "strat": strat,
-                        })
-                        stream_url = f"http://localhost:{port}/fortuna/bars?{qs}"
-                    except Exception:
-                        stream_url = None
+                            qs = urlencode({
+                                "symbol": state.symbol,
+                                "tf": state.timeframe,
+                                "strat": strat,
+                            })
+                            stream_url = f"http://localhost:{port}/fortuna/bars?{qs}"
+                        except Exception:
+                            stream_url = None
+                    elif live_on and not engine.is_live():
+                        st.caption(
+                            "Chart streaming starts once the live WebSocket feed connects. "
+                            "Ensure **Live** is checked and click **Analyze**."
+                        )
 
                     components.html(
                         render_lightweight_charts_html(
                             spec,
                             height=580,
                             stream_url=stream_url,
-                            stream_poll_ms=2500,
+                            stream_poll_ms=1500,
                         ),
                         height=600,
                         scrolling=False,
@@ -601,8 +730,8 @@ def main() -> None:
             else ""
         )
         st.caption(
-            f"**{state.timeframe}** · NSE session 09:15–15:30 IST · candles plotted "
-            f"by trading-bar sequence (no weekend / off-hour gaps). "
+            f"**{state.timeframe}** · NSE session 09:15–15:30 IST · "
+            f"initial view anchors on today's session (pan left for prior days). "
             f"▲ BUY below bar · ▼ SELL above bar · ◆ EXIT. "
             f"Live forming-bar signal flashes on the latest candle.{live_note}"
         )
@@ -651,52 +780,52 @@ def main() -> None:
 
 
 def _render_assistant_panel(engine) -> None:
-    st.subheader("Agentic assistant")
+    st.subheader("Signal assistant")
     adapter_enabled = bool(getattr(engine.settings, "conversational_adapter_enabled", False))
     if adapter_enabled:
         st.caption(
-            "Conversational adapter is enabled. Free-form prompts are normalized into "
-            "typed advisory tool calls with safe fallback behavior."
+            "Telegram and chat-style signal requests are the primary product path. "
+            "This console is the operator-side view of the same typed assistant."
         )
     else:
         st.caption(
-            "Conversational adapter is disabled. The assistant still supports explicit "
-            "commands such as /search and /analyze."
+            "Conversational mode is disabled, but explicit signal commands still work."
         )
 
-    examples = (
-        "/search RELIANCE",
-        "/analyze RELIANCE",
-        "/analyze RELIANCE FUT",
-        "How is Reliance looking on 15m for 20d?",
-        "Should I enter NIFTY CE 25000 28MAY2026?",
-    )
+    expert_visible = bool(getattr(engine.settings, "signal_expert_commands_visible", False))
+    actions = build_dashboard_assistant_actions(include_expert=expert_visible)
+    examples = build_dashboard_assistant_examples(include_expert=expert_visible)
     st.write("Examples:")
     for ex in examples:
         st.code(ex, language="text")
 
     if "assistant_history" not in st.session_state:
         st.session_state.assistant_history = []
+    if "assistant_workflow" not in st.session_state:
+        st.session_state.assistant_workflow = None
 
     assistant = engine.conversational_assistant()
-    prompt = st.chat_input("Ask Fortuna about a stock, future, or option contract")
-    if prompt:
-        result = assistant.handle_interaction(prompt)
-        st.session_state.assistant_history.append({"role": "user", "content": prompt})
-        st.session_state.assistant_history.append(
-            {
-                "role": "assistant",
-                "content": result.reply,
-                "meta": {
-                    "source": result.source,
-                    "confidence": result.source_confidence,
-                    "tool": result.tool or "",
-                    "rationale": result.source_rationale,
-                },
-            }
-        )
-        max_pairs = max(2, int(getattr(engine.settings, "conversational_max_history", 12)))
-        st.session_state.assistant_history = st.session_state.assistant_history[-(max_pairs * 2) :]
+    st.write("Quick actions:")
+    queued_prompt = None
+    action_columns = st.columns(3)
+    for idx, action in enumerate(actions):
+        column = action_columns[idx % len(action_columns)]
+        if column.button(
+            action.label,
+            key=f"assistant-action-{idx}",
+            help=action.caption,
+            use_container_width=True,
+        ):
+            queued_prompt = action.prompt
+
+    prompt = st.chat_input(
+        "Ask for a signal on a stock, future, or option"
+    )
+    chosen_prompt = queued_prompt or prompt
+    if chosen_prompt:
+        _run_assistant_prompt(engine, assistant, chosen_prompt)
+
+    _render_assistant_workflow_console(engine)
 
     for item in st.session_state.assistant_history:
         with st.chat_message(item["role"]):
@@ -708,6 +837,849 @@ def _render_assistant_panel(engine) -> None:
                     f"confidence={float(meta.get('confidence', 0.0)):.2f} · "
                     f"tool={meta.get('tool', '')}"
                 )
+
+
+def _run_assistant_prompt(engine, assistant, prompt: str) -> None:
+    result = assistant.handle_interaction(prompt)
+    st.session_state.assistant_history.append({"role": "user", "content": prompt})
+    st.session_state.assistant_history.append(
+        {
+            "role": "assistant",
+            "content": result.reply,
+            "meta": {
+                "source": result.source,
+                "confidence": result.source_confidence,
+                "tool": result.tool or "",
+                "rationale": result.source_rationale,
+            },
+        }
+    )
+    max_pairs = max(2, int(getattr(engine.settings, "conversational_max_history", 12)))
+    st.session_state.assistant_history = st.session_state.assistant_history[-(max_pairs * 2) :]
+
+
+def _infer_research_refresh_target_from_command(command: str) -> str:
+    text = str(command or "").strip()
+    if not text:
+        return "rl"
+    parts = text.split()
+    for idx, part in enumerate(parts):
+        token = str(part or "").strip().lower()
+        if token == "--refresh-target" and idx + 1 < len(parts):
+            value = str(parts[idx + 1] or "").strip().lower()
+            if value in {"rl", "ml", "all"}:
+                return value
+        if token.startswith("--refresh-target="):
+            value = token.split("=", 1)[1].strip().lower()
+            if value in {"rl", "ml", "all"}:
+                return value
+    return "rl"
+
+
+def _sync_research_refresh_target_selection(recommended_command: str) -> str:
+    options = ("rl", "ml", "all")
+    suggested = _infer_research_refresh_target_from_command(recommended_command)
+    selection_key = "assistant-workflow-research-refresh-target"
+    suggested_key = "assistant-workflow-research-refresh-target-suggested"
+    current = str(st.session_state.get(selection_key, "") or "").strip().lower()
+    previous_suggested = str(st.session_state.get(suggested_key, "") or "").strip().lower()
+    if current not in options or not current or current == previous_suggested:
+        st.session_state[selection_key] = suggested
+    st.session_state[suggested_key] = suggested
+    return str(st.session_state.get(selection_key, suggested) or suggested)
+
+
+def _sync_research_refresh_target_preference(
+    summary: dict,
+    recommended_command: str,
+    *,
+    artifact_target: str | None = None,
+) -> str:
+    target = str(summary.get("recommended_refresh_target") or "").strip().lower()
+    if target not in {"rl", "ml", "all"}:
+        artifact = str(artifact_target or "").strip().lower()
+        if artifact in {"rl", "ml", "all"}:
+            target = artifact
+    if target not in {"rl", "ml", "all"}:
+        target = _sync_research_refresh_target_selection(recommended_command)
+    else:
+        options = ("rl", "ml", "all")
+        selection_key = "assistant-workflow-research-refresh-target"
+        suggested_key = "assistant-workflow-research-refresh-target-suggested"
+        current = str(st.session_state.get(selection_key, "") or "").strip().lower()
+        previous_suggested = str(st.session_state.get(suggested_key, "") or "").strip().lower()
+        if current not in options or not current or current == previous_suggested:
+            st.session_state[selection_key] = target
+        st.session_state[suggested_key] = target
+    return str(st.session_state.get("assistant-workflow-research-refresh-target", target) or target)
+
+
+def _nightly_alignment_prefill_state(summary: dict) -> tuple[bool, bool]:
+    if not isinstance(summary, dict):
+        return False, False
+    recommended_action = str(summary.get("recommended_action") or "").strip()
+    if not recommended_action:
+        return False, False
+    typed_force_refresh = summary.get("recommended_force_refresh")
+    if isinstance(typed_force_refresh, bool):
+        return True, typed_force_refresh
+    enabled_reports = int(summary.get("enabled_reports", 0) or 0)
+    refreshed_aligned_reports = int(summary.get("refreshed_aligned_reports", 0) or 0)
+    refreshed_ratio = (
+        float(refreshed_aligned_reports) / float(enabled_reports)
+        if enabled_reports > 0
+        else 0.0
+    )
+    severe = enabled_reports >= 2 and refreshed_ratio <= 0.2
+    return True, severe
+
+
+def _format_recent_nightly_alignment_trend(summary: dict) -> str:
+    if not isinstance(summary, dict):
+        return ""
+    recent_window = int(summary.get("recent_trend_window", 0) or 0)
+    recent_enabled = int(summary.get("recent_trend_enabled", 0) or 0)
+    recent_aligned = int(summary.get("recent_trend_aligned", 0) or 0)
+    latest_status = str(summary.get("recent_trend_latest_status") or "").strip() or "—"
+    latest_basket = int(summary.get("recent_trend_latest_basket_size", 0) or 0)
+    if recent_window <= 0:
+        recent = summary.get("recent_rows") or ()
+        if not recent:
+            return ""
+        recent_window_rows = tuple(row for row in recent[:3] if isinstance(row, dict))
+        if not recent_window_rows:
+            return ""
+        recent_window = len(recent_window_rows)
+        recent_enabled = sum(
+            1 for row in recent_window_rows if bool(row.get("alignment_enabled"))
+        )
+        recent_aligned = sum(
+            1
+            for row in recent_window_rows
+            if bool(row.get("alignment_enabled")) and str(row.get("target_mix") or "").strip()
+        )
+        latest = recent_window_rows[0]
+        latest_status = str(latest.get("overall_status") or "").strip() or "—"
+        latest_basket = int(latest.get("basket_size", 0) or 0)
+    return (
+        f"Recent trend: {recent_aligned}/{recent_enabled} aligned over last "
+        f"{recent_window} run(s); latest={latest_status} basket={latest_basket}"
+    )
+
+
+def _target_from_alignment_mix(mix: str) -> str:
+    text = str(mix or "").strip().lower()
+    if not text:
+        return ""
+    keys = set()
+    for part in text.split(","):
+        chunk = part.strip()
+        if not chunk or "=" not in chunk:
+            continue
+        key = chunk.split("=", 1)[0].strip()
+        if key:
+            keys.add(key)
+    if not keys:
+        return ""
+    if "none" in keys or "both" in keys:
+        return "all"
+    if "ml" in keys and "rl" not in keys:
+        return "rl"
+    if "rl" in keys and "ml" not in keys:
+        return "ml"
+    if "ml" in keys and "rl" in keys:
+        return "all"
+    return ""
+
+
+def _sync_research_refresh_toggle(
+    *,
+    key: str,
+    suggested_key: str,
+    suggested_value: bool,
+) -> bool:
+    current = st.session_state.get(key)
+    previous_suggested = st.session_state.get(suggested_key)
+    if current is None or current == previous_suggested:
+        st.session_state[key] = suggested_value
+    st.session_state[suggested_key] = suggested_value
+    return bool(st.session_state.get(key, suggested_value))
+
+
+def _workflow_snapshot_from_state(
+    workflow: dict,
+    *,
+    source: str,
+    timeframe: str,
+    days: int,
+) -> WorkflowSnapshot | None:
+    if not isinstance(workflow, dict):
+        return None
+    snapshot = workflow.get("workflow_snapshot")
+    if isinstance(snapshot, WorkflowSnapshot):
+        return snapshot
+    required = ("team", "universe", "shortlist", "briefing", "candidates", "research", "allocation")
+    if any(workflow.get(key) is None for key in required):
+        return None
+    return WorkflowSnapshot(
+        source=source,
+        timeframe=timeframe,
+        lookback_days=int(days),
+        team=workflow["team"],
+        universe=workflow["universe"],
+        shortlist=workflow["shortlist"],
+        briefing=workflow["briefing"],
+        candidates=workflow["candidates"],
+        research=workflow["research"],
+        allocation=workflow["allocation"],
+    )
+
+
+def _annotate_snapshot_artifact_follow_up(
+    snapshot: WorkflowSnapshot | None,
+    workflow: dict,
+) -> WorkflowSnapshot | None:
+    if snapshot is None or not isinstance(workflow, dict):
+        return snapshot
+    follow_up = build_workflow_artifact_follow_up(workflow)
+    if follow_up is None:
+        return snapshot
+    return annotate_artifact_recovery_posture(
+        snapshot,
+        action_label=follow_up.action_label,
+        target=follow_up.target,
+        posture_text=artifact_follow_up_team_posture(follow_up),
+    )
+
+
+def _render_assistant_workflow_console(engine) -> None:
+    st.divider()
+    st.subheader("Workflow console")
+    st.caption(
+        "Refresh the liquid universe, ranked shortlist, allocation view, and shortlist-driven "
+        "ML/RL training candidates from one place."
+    )
+    try:
+        model_health = engine.model_status().to_dict()
+    except Exception:
+        model_health = {}
+    current_workflow = st.session_state.assistant_workflow or {}
+    artifact_follow_up = build_workflow_artifact_follow_up(current_workflow)
+    nightly_alignment = (
+        ((model_health.get("agentic") or {}).get("nightly_alignment") or {})
+        if isinstance(model_health, dict)
+        else {}
+    )
+    recommended_action = str(nightly_alignment.get("recommended_action") or "").strip()
+    recommended_command = str(nightly_alignment.get("recommended_cli_command") or "").strip()
+    suggested_refresh_target = _sync_research_refresh_target_preference(
+        nightly_alignment,
+        recommended_command,
+        artifact_target=artifact_follow_up_refresh_target(artifact_follow_up),
+    )
+    suggested_refresh_data, suggested_force_refresh = _nightly_alignment_prefill_state(
+        nightly_alignment
+    )
+    research_refresh_data_default = _sync_research_refresh_toggle(
+        key="assistant-workflow-research-refresh-data",
+        suggested_key="assistant-workflow-research-refresh-data-suggested",
+        suggested_value=suggested_refresh_data,
+    )
+    research_force_refresh_default = _sync_research_refresh_toggle(
+        key="assistant-workflow-research-force-refresh",
+        suggested_key="assistant-workflow-research-force-refresh-suggested",
+        suggested_value=suggested_force_refresh,
+    )
+    if recommended_action:
+        st.warning(recommended_action)
+        if recommended_command:
+            st.caption(f"Suggested command: `{recommended_command}`")
+            st.caption(f"Suggested in-app refresh target: `{suggested_refresh_target}`")
+            if suggested_refresh_data:
+                st.caption(
+                    "Suggested in-app refresh mode: `Refresh research data`"
+                    + (" + `Force research refresh`" if suggested_force_refresh else "")
+                )
+    elif artifact_follow_up is not None:
+        target_note = (
+            f" target=`{artifact_follow_up.target}`" if artifact_follow_up.target else ""
+        )
+        st.caption(
+            f"Artifact-driven follow-up: **{artifact_follow_up.action_label}**"
+            f"{target_note} - {artifact_follow_up.rationale}"
+        )
+
+    controls = st.columns(5)
+    timeframe = controls[0].selectbox(
+        "Timeframe",
+        ("5m", "15m", "30m", "1h", "1d"),
+        index=0,
+        key="assistant-workflow-timeframe",
+    )
+    days = int(
+        controls[1].number_input(
+            "Lookback days",
+            min_value=5,
+            max_value=120,
+            value=20,
+            step=5,
+            key="assistant-workflow-days",
+        )
+    )
+    source = controls[2].selectbox(
+        "Universe source",
+        ("auto", "screener", "registry"),
+        index=0,
+        key="assistant-workflow-source",
+    )
+    universe_limit = int(
+        controls[3].number_input(
+            "Universe limit",
+            min_value=5,
+            max_value=40,
+            value=10,
+            step=1,
+            key="assistant-workflow-universe-limit",
+        )
+    )
+    candidate_limit = int(
+        controls[4].number_input(
+            "Shortlist limit",
+            min_value=3,
+            max_value=20,
+            value=8,
+            step=1,
+            key="assistant-workflow-candidate-limit",
+        )
+    )
+    refresh_controls = st.columns(3)
+    research_refresh_data = refresh_controls[0].checkbox(
+        "Refresh research data",
+        value=research_refresh_data_default,
+        key="assistant-workflow-research-refresh-data",
+    )
+    research_refresh_target = refresh_controls[1].selectbox(
+        "Research refresh target",
+        ("rl", "ml", "all"),
+        index=("rl", "ml", "all").index(suggested_refresh_target),
+        key="assistant-workflow-research-refresh-target",
+    )
+    research_force_refresh = refresh_controls[2].checkbox(
+        "Force research refresh",
+        value=research_force_refresh_default,
+        key="assistant-workflow-research-force-refresh",
+    )
+    if artifact_follow_up_prefers_discovery(artifact_follow_up):
+        st.caption(
+            "Latest saved review artifacts are leaning toward **Refresh market universe** "
+            "before another research refresh."
+        )
+
+    action_cols = st.columns(6)
+    if action_cols[0].button(
+        "Refresh workflow", key="assistant-workflow-refresh", use_container_width=True
+    ):
+        briefing_limit = max(3, min(candidate_limit, 10))
+        team = engine.multi_agent_workflow(
+            universe_limit=max(universe_limit, candidate_limit * 2),
+            analysis_limit=candidate_limit,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+            selection_policy="diversified",
+            refresh_research_data=research_refresh_data,
+            research_refresh_target=research_refresh_target,
+            research_refresh_timeframe=timeframe,
+            research_refresh_days=days,
+            force_refresh=research_force_refresh,
+        )
+        workflow_snapshot = summarize_multi_agent_workflow(team)
+        st.session_state.assistant_workflow = {
+            "team_response": team,
+            "workflow_snapshot": workflow_snapshot,
+            "team": workflow_snapshot.team,
+            "universe": workflow_snapshot.universe,
+            "shortlist": workflow_snapshot.shortlist,
+            "briefing": workflow_snapshot.briefing,
+            "candidates": workflow_snapshot.candidates,
+            "research": workflow_snapshot.research,
+            "allocation": workflow_snapshot.allocation,
+            "team_headline": team.headline,
+            "team_roles": tuple(role.to_dict() for role in team.roles),
+            "team_nightly_alignment": (
+                team.nightly_alignment.to_dict() if team.nightly_alignment is not None else {}
+            ),
+        }
+    if action_cols[1].button(
+        "Refresh market universe",
+        key="assistant-workflow-universe-refresh",
+        use_container_width=True,
+        disabled=not bool(st.session_state.assistant_workflow),
+    ):
+        workflow = st.session_state.assistant_workflow or {}
+        universe_response = engine.market_universe(
+            limit=max(universe_limit, candidate_limit * 2),
+            timeframe="1d",
+            days=max(days, 20),
+            source=source,
+        )
+        workflow["universe"] = summarize_market_universe(universe_response)
+        team_response = workflow.get("team_response")
+        if team_response is not None:
+            refreshed_team = replace_workflow_universe(
+                team_response,
+                universe=universe_response,
+            )
+            workflow_snapshot = annotate_discovery_refresh(
+                summarize_multi_agent_workflow(refreshed_team),
+                source=source,
+                timeframe="1d",
+                days=max(days, 20),
+                refreshed_count=len(getattr(universe_response, "candidates", ())),
+            )
+            workflow["team_response"] = refreshed_team
+            workflow["workflow_snapshot"] = workflow_snapshot
+            workflow["team"] = workflow_snapshot.team
+            workflow["universe"] = workflow_snapshot.universe
+            workflow["team_headline"] = refreshed_team.headline
+            workflow["team_roles"] = tuple(role.to_dict() for role in refreshed_team.roles)
+            workflow["team_nightly_alignment"] = (
+                refreshed_team.nightly_alignment.to_dict()
+                if refreshed_team.nightly_alignment is not None
+                else {}
+            )
+        st.session_state.assistant_workflow = workflow
+    if action_cols[2].button(
+        "Refresh training research",
+        key="assistant-workflow-research-refresh",
+        use_container_width=True,
+    ):
+        briefing_limit = max(3, min(candidate_limit, 10))
+        workflow = st.session_state.assistant_workflow or {}
+        workflow["research"] = summarize_training_research(
+            engine.training_research_plan(
+                universe_limit=max(universe_limit, candidate_limit * 2),
+                analysis_limit=candidate_limit,
+                timeframe=timeframe,
+                days=days,
+                source=source,
+                selection_policy="diversified",
+                refresh_data=research_refresh_data,
+                refresh_target=research_refresh_target,
+                refresh_timeframe=timeframe,
+                refresh_days=days,
+                force_refresh=research_force_refresh,
+            )
+        )
+        if "candidates" not in workflow:
+            workflow["candidates"] = summarize_training_candidates(
+                engine.training_candidates(
+                    universe_limit=max(universe_limit, candidate_limit * 2),
+                    analysis_limit=candidate_limit,
+                    timeframe=timeframe,
+                    days=days,
+                    source=source,
+                )
+            )
+        if "allocation" not in workflow:
+            workflow["allocation"] = summarize_portfolio_allocation(
+                engine.portfolio_allocation(
+                    universe_limit=max(universe_limit, briefing_limit * 2),
+                    analysis_limit=briefing_limit,
+                    timeframe=timeframe,
+                    days=days,
+                    source=source,
+                )
+            )
+        workflow_source = (
+            str(workflow.get("team_response").source)
+            if workflow.get("team_response") is not None
+            else source
+        )
+        snapshot = _workflow_snapshot_from_state(
+            workflow,
+            source=workflow_source,
+            timeframe=timeframe,
+            days=days,
+        )
+        if snapshot is not None:
+            workflow["workflow_snapshot"] = replace_workflow_snapshot_sections(
+                snapshot,
+                research=workflow["research"],
+                candidates=workflow["candidates"],
+                allocation=workflow["allocation"],
+            )
+        st.session_state.assistant_workflow = workflow
+    if action_cols[3].button(
+        "Save workflow snapshot",
+        key="assistant-workflow-save-snapshot",
+        use_container_width=True,
+        disabled=not bool(st.session_state.assistant_workflow),
+    ):
+        workflow = st.session_state.assistant_workflow or {}
+        workflow_source = (
+            str(workflow.get("team_response").source)
+            if workflow.get("team_response") is not None
+            else source
+        )
+        snapshot = _workflow_snapshot_from_state(
+            workflow,
+            source=workflow_source,
+            timeframe=timeframe,
+            days=days,
+        )
+        snapshot = _annotate_snapshot_artifact_follow_up(snapshot, workflow)
+        if snapshot is None:
+            st.warning("Load the workflow first so Fortuna has a full snapshot to export.")
+        else:
+            project_root = Path(getattr(engine.settings, "project_root", Path.cwd()))
+            out_path = (
+                project_root
+                / "reports"
+                / "dashboard"
+                / f"workflow_snapshot_{time.strftime('%Y%m%d-%H%M%S')}.json"
+            )
+            written = export_workflow_snapshot(snapshot, out_path)
+            workflow["workflow_snapshot"] = snapshot
+            workflow["saved_workflow_snapshot_path"] = str(written)
+            st.session_state.assistant_workflow = workflow
+    if action_cols[4].button(
+        "Build acceptance review",
+        key="assistant-workflow-build-acceptance",
+        use_container_width=True,
+        disabled=not bool(st.session_state.assistant_workflow),
+    ):
+        workflow = st.session_state.assistant_workflow or {}
+        workflow_source = (
+            str(workflow.get("team_response").source)
+            if workflow.get("team_response") is not None
+            else source
+        )
+        snapshot = _workflow_snapshot_from_state(
+            workflow,
+            source=workflow_source,
+            timeframe=timeframe,
+            days=days,
+        )
+        snapshot = _annotate_snapshot_artifact_follow_up(snapshot, workflow)
+        if snapshot is None:
+            st.warning("Load the workflow first so Fortuna has a snapshot to review.")
+        else:
+            project_root = Path(getattr(engine.settings, "project_root", Path.cwd()))
+            reports_dir = project_root / "reports" / "dashboard"
+            snapshot_path = str(workflow.get("saved_workflow_snapshot_path") or "").strip()
+            if not snapshot_path:
+                snapshot_path = str(
+                    export_workflow_snapshot(
+                        snapshot,
+                        reports_dir / f"workflow_snapshot_{time.strftime('%Y%m%d-%H%M%S')}.json",
+                    )
+                )
+                workflow["saved_workflow_snapshot_path"] = snapshot_path
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            bundle, md_path, json_path = build_and_export_acceptance_bundle(
+                settings=engine.settings,
+                engine=engine,
+                models_root=project_root / "models",
+                ml_base=project_root / "models" / "ml_signal_scorer",
+                workflow_snapshot_path=snapshot_path,
+                out_dir=reports_dir,
+                basename=f"acceptance_bundle_{stamp}",
+                include_model_health=True,
+            )
+            workflow["workflow_snapshot"] = snapshot
+            workflow["acceptance_bundle_status"] = bundle.overall_status
+            workflow["acceptance_bundle_markdown_path"] = str(md_path)
+            workflow["acceptance_bundle_json_path"] = str(json_path)
+            st.session_state.assistant_workflow = workflow
+    if action_cols[5].button(
+        "Build promotion review",
+        key="assistant-workflow-build-promotion",
+        use_container_width=True,
+        disabled=not bool(st.session_state.assistant_workflow),
+    ):
+        workflow = st.session_state.assistant_workflow or {}
+        workflow_source = (
+            str(workflow.get("team_response").source)
+            if workflow.get("team_response") is not None
+            else source
+        )
+        snapshot = _workflow_snapshot_from_state(
+            workflow,
+            source=workflow_source,
+            timeframe=timeframe,
+            days=days,
+        )
+        snapshot = _annotate_snapshot_artifact_follow_up(snapshot, workflow)
+        if snapshot is None:
+            st.warning("Load the workflow first so Fortuna has a snapshot to review.")
+        else:
+            project_root = Path(getattr(engine.settings, "project_root", Path.cwd()))
+            reports_dir = project_root / "reports" / "dashboard"
+            snapshot_path = str(workflow.get("saved_workflow_snapshot_path") or "").strip()
+            if not snapshot_path:
+                snapshot_path = str(
+                    export_workflow_snapshot(
+                        snapshot,
+                        reports_dir / f"workflow_snapshot_{time.strftime('%Y%m%d-%H%M%S')}.json",
+                    )
+                )
+                workflow["saved_workflow_snapshot_path"] = snapshot_path
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            review_result = build_and_export_promotion_review(
+                kind=ModelKind.RL_POLICY,
+                models_root=project_root / "models",
+                ml_base=project_root / "models" / "ml_signal_scorer",
+                symbol=str(getattr(engine.state, "symbol", "") or "").strip() or None,
+                workflow_snapshot_path=snapshot_path,
+                out_dir=reports_dir,
+                basename=f"promotion_review_rl_{stamp}",
+                settings=engine.settings,
+            )
+            review_kind = "rl"
+            if review_result is None:
+                review_result = build_and_export_promotion_review(
+                    kind=ModelKind.ML_SCORER,
+                    models_root=project_root / "models",
+                    ml_base=project_root / "models" / "ml_signal_scorer",
+                    workflow_snapshot_path=snapshot_path,
+                    out_dir=reports_dir,
+                    basename=f"promotion_review_ml_{stamp}",
+                    settings=engine.settings,
+                )
+                review_kind = "ml"
+            if review_result is None:
+                st.warning(
+                    "No promoted ML/RL artifact is available yet, so Fortuna could not build a promotion review."
+                )
+            else:
+                review, md_path, json_path = review_result
+                workflow["workflow_snapshot"] = snapshot
+                workflow["promotion_review_kind"] = review_kind
+                workflow["promotion_review_markdown_path"] = str(md_path)
+                workflow["promotion_review_json_path"] = str(json_path)
+                workflow["promotion_review_run_id"] = str(review.record.run_id or "")
+                st.session_state.assistant_workflow = workflow
+
+    workflow = st.session_state.assistant_workflow
+    if not workflow:
+        st.info("Click **Refresh workflow** to load the current universe, setups, and candidates.")
+        return
+
+    artifact_rows = build_workflow_artifact_rows(workflow)
+    if artifact_rows:
+        st.caption("Workflow artifacts")
+        st.dataframe(
+            [row.to_dict() for row in artifact_rows],
+            use_container_width=True,
+            hide_index=True,
+        )
+        artifact_follow_up = build_workflow_artifact_follow_up(workflow)
+        if artifact_follow_up is not None:
+            target_note = (
+                f" target=`{artifact_follow_up.target}`" if artifact_follow_up.target else ""
+            )
+            st.caption(
+                f"Suggested follow-up: **{artifact_follow_up.action_label}**"
+                f"{target_note} - {artifact_follow_up.rationale}"
+            )
+
+    team = workflow.get("team")
+    universe = workflow["universe"]
+    shortlist = workflow["shortlist"]
+    briefing = workflow["briefing"]
+    candidates = workflow["candidates"]
+    research = workflow.get("research")
+    allocation = workflow["allocation"]
+    team_headline = str(workflow.get("team_headline") or "").strip()
+    team_roles = workflow.get("team_roles") or ()
+    team_nightly_alignment = workflow.get("team_nightly_alignment") or {}
+
+    if team_headline:
+        st.caption(team_headline)
+    team_recovery_posture = artifact_follow_up_team_posture(artifact_follow_up)
+    if team_recovery_posture:
+        st.caption(f"Team recovery posture: {team_recovery_posture}")
+    if team_roles:
+        preferred_roles = {
+            "universe_scout",
+            "briefing_agent",
+            "portfolio_allocator",
+            "research_planner",
+        }
+        role_line = " | ".join(
+            f"{str(row.get('name', 'agent'))}: {str(row.get('headline', '')).strip()}"
+            for row in team_roles
+            if isinstance(row, dict)
+            and str(row.get("name", "")).strip() in preferred_roles
+        )
+        if role_line:
+            st.caption(role_line)
+    if team is not None:
+        team_metrics = getattr(team, "metrics", {}) or {}
+        research_policy = str(team_metrics.get("research_selection_policy") or "").strip()
+        research_target = str(team_metrics.get("research_refresh_target") or "").strip()
+        research_ml_count = int(team_metrics.get("research_ml_count", 0) or 0)
+        research_rl_count = int(team_metrics.get("research_rl_count", 0) or 0)
+        research_refreshed_count = int(team_metrics.get("research_refreshed_count", 0) or 0)
+        research_refresh_requested = bool(team_metrics.get("research_refresh_requested", False))
+        research_headline = str(team_metrics.get("research_headline") or "").strip()
+        discovery_alignment_summary = str(
+            team_metrics.get("discovery_alignment_summary") or ""
+        ).strip()
+        discovery_overlap_symbols = str(team_metrics.get("discovery_overlap_symbols") or "").strip()
+        research_alignment_summary = str(
+            team_metrics.get("research_alignment_summary") or ""
+        ).strip()
+        research_alignment_mix = str(team_metrics.get("research_alignment_target_mix") or "").strip()
+        research_alignment_target = _target_from_alignment_mix(research_alignment_mix)
+        if research_headline:
+            research_line = f"Research planner: {research_headline}"
+            details: list[str] = []
+            if research_policy:
+                details.append(f"policy `{research_policy}`")
+            if research_target:
+                details.append(f"target `{research_target}`")
+            if research_ml_count or research_rl_count:
+                details.append(f"ML `{research_ml_count}` / RL `{research_rl_count}`")
+            if research_refresh_requested:
+                details.append(f"refreshed `{research_refreshed_count}`")
+            if research_alignment_summary:
+                details.append(research_alignment_summary)
+            if research_alignment_mix:
+                details.append(f"mix `{research_alignment_mix}`")
+            if research_alignment_target:
+                details.append(f"suggested target `{research_alignment_target}`")
+            if details:
+                research_line += " | " + " | ".join(details)
+            st.caption(research_line)
+        if discovery_alignment_summary:
+            discovery_line = f"Discovery posture: {discovery_alignment_summary}"
+            if discovery_overlap_symbols:
+                discovery_line += f" | overlap `{discovery_overlap_symbols}`"
+            st.caption(discovery_line)
+    if isinstance(team_nightly_alignment, dict):
+        latest_execution_text = format_latest_nightly_execution_posture(
+            team_nightly_alignment
+        )
+        if latest_execution_text:
+            st.caption(latest_execution_text)
+        latest_discovery_text = format_latest_nightly_discovery_context(
+            team_nightly_alignment
+        )
+        if latest_discovery_text:
+            st.caption(latest_discovery_text)
+        team_recommended_action = str(
+            team_nightly_alignment.get("recommended_action") or ""
+        ).strip()
+        if team_recommended_action:
+            st.info(f"Team posture: {team_recommended_action}")
+        team_discovery_action = str(
+            team_nightly_alignment.get("recommended_discovery_action") or ""
+        ).strip()
+        if team_discovery_action:
+            st.info(f"Team discovery follow-up: {team_discovery_action}")
+        trend_text = _format_recent_nightly_alignment_trend(team_nightly_alignment)
+        if trend_text:
+            st.caption(trend_text)
+        latest_mix = str(
+            team_nightly_alignment.get("latest_target_mix") or ""
+        ).strip()
+        if latest_mix:
+            st.caption(f"Latest team target mix: `{latest_mix}`")
+        latest_refreshed_mix = str(
+            team_nightly_alignment.get("latest_refreshed_target_mix") or ""
+        ).strip()
+        if latest_refreshed_mix:
+            st.caption(f"Latest refreshed team mix: `{latest_refreshed_mix}`")
+        discovery_command = str(
+            team_nightly_alignment.get("recommended_discovery_cli_command") or ""
+        ).strip()
+        if discovery_command:
+            st.caption(f"Suggested discovery command: `{discovery_command}`")
+        if research_alignment_target and suggested_refresh_target != research_alignment_target:
+            st.caption(
+                "Current basket differs from nightly posture: "
+                f"nightly `{suggested_refresh_target}` vs current `{research_alignment_target}`"
+            )
+
+    metric_cols = st.columns(8)
+    metric_cols[0].metric("Universe", universe.metrics.get("count", 0))
+    metric_cols[1].metric("Top liquidity", universe.metrics.get("top_liquidity_score", 0.0))
+    metric_cols[2].metric("Shortlist", shortlist.metrics.get("count", 0))
+    metric_cols[3].metric("Setups", briefing.metrics.get("candidates", 0))
+    metric_cols[4].metric("Allocated", allocation.metrics.get("selected_count", 0))
+    metric_cols[5].metric("ML picks", candidates.metrics.get("ml_count", 0))
+    metric_cols[6].metric("RL picks", candidates.metrics.get("rl_count", 0))
+    metric_cols[7].metric("Research rows", 0 if research is None else research.metrics.get("count", 0))
+
+    tab_universe, tab_shortlist, tab_brief, tab_allocate, tab_candidates, tab_research = st.tabs(
+        ["Universe", "Shortlist", "Top setups", "Allocation", "Training candidates", "Training research"]
+    )
+
+    with tab_universe:
+        if universe.error:
+            st.error(universe.error)
+        else:
+            st.caption(f"Source: {universe.metrics.get('source', 'auto')}")
+            st.dataframe(list(universe.rows), use_container_width=True, hide_index=True)
+
+    with tab_shortlist:
+        if shortlist.error:
+            st.error(shortlist.error)
+        else:
+            st.caption(f"Source: {shortlist.metrics.get('source', 'auto')}")
+            st.dataframe(list(shortlist.rows), use_container_width=True, hide_index=True)
+
+    with tab_brief:
+        if briefing.error:
+            st.error(briefing.error)
+        else:
+            headline = briefing.metrics.get("headline")
+            if headline:
+                st.caption(str(headline))
+            st.dataframe(list(briefing.rows), use_container_width=True, hide_index=True)
+            for note in briefing.notes:
+                st.warning(note)
+
+    with tab_allocate:
+        if allocation.error:
+            st.error(allocation.error)
+        else:
+            headline = allocation.metrics.get("headline")
+            if headline:
+                st.caption(str(headline))
+            st.dataframe(list(allocation.rows), use_container_width=True, hide_index=True)
+            for note in allocation.notes:
+                st.info(note)
+
+    with tab_candidates:
+        if candidates.error:
+            st.error(candidates.error)
+        else:
+            st.caption(f"Source: {candidates.metrics.get('source', 'auto')}")
+            st.dataframe(list(candidates.rows), use_container_width=True, hide_index=True)
+
+    with tab_research:
+        if research is None:
+            st.info("Click **Refresh training research** to load the current ML/RL prep plan.")
+        elif research.error:
+            st.error(research.error)
+        else:
+            st.caption(
+                "Source: "
+                f"{research.metrics.get('source', 'auto')} | "
+                f"Policy: {research.metrics.get('selection_policy', 'diversified')} | "
+                f"Refresh target: {research.metrics.get('refresh_target', 'all')} | "
+                f"Refreshed: {research.metrics.get('refreshed_count', 0)}"
+            )
+            if research.metrics.get("refresh_requested"):
+                st.success(
+                    f"Targeted research refresh requested for "
+                    f"{research.metrics.get('refresh_target', 'all')} "
+                    f"and refreshed {research.metrics.get('refreshed_count', 0)} symbol(s)."
+                )
+            st.dataframe(list(research.rows), use_container_width=True, hide_index=True)
 
 
 def _render_execution_panel(engine) -> None:
@@ -1183,11 +2155,49 @@ def _render_models_panel(engine, live_signals) -> None:
     except Exception:  # noqa: BLE001
         status = {}
 
+    readiness = status.get("runtime_readiness") or {}
+    if readiness:
+        posture = readiness.get("overall_posture", "unknown")
+        nightly = readiness.get("nightly_posture", "unknown")
+        summary = readiness.get("summary", "")
+        if posture == "blocked":
+            st.error(f"Runtime posture: **{posture}** | Nightly: **{nightly}** — {summary}")
+        elif posture == "advisory_ready":
+            st.success(f"Runtime posture: **{posture}** | Nightly: **{nightly}** — {summary}")
+        elif posture == "advisory_partial":
+            st.warning(f"Runtime posture: **{posture}** | Nightly: **{nightly}** — {summary}")
+        else:
+            st.info(f"Runtime posture: **{posture}** | Nightly: **{nightly}** — {summary}")
+        blockers = readiness.get("blockers") or []
+        if blockers:
+            st.caption(
+                "Blockers: "
+                + "; ".join(f"{row.get('name')}: {row.get('detail')}" for row in blockers[:3])
+            )
+    scaling = status.get("scaling") or {}
+    if scaling:
+        st.caption(
+            "Scaling: "
+            f"**{scaling.get('basket_posture', 'unknown')}** "
+            f"(recommended max {scaling.get('recommended_max_symbols', '—')} symbols) — "
+            f"{scaling.get('summary', '')}"
+        )
+
     _render_registry_panel(status)
     st.divider()
-    _render_rl_panel(engine, live_signals, rl_status=status.get("rl") or {})
+    activation = status.get("activation") or {}
+    _render_rl_panel(
+        engine,
+        live_signals,
+        rl_status=status.get("rl") or {},
+        activation=activation.get("rl") or {},
+    )
     st.divider()
-    _render_ml_panel(engine, ml_status=status.get("ml") or {})
+    _render_ml_panel(
+        engine,
+        ml_status=status.get("ml") or {},
+        activation=activation.get("ml") or {},
+    )
     st.divider()
     _render_regime_panel(status.get("regime") or {})
     st.divider()
@@ -1215,7 +2225,19 @@ def _render_registry_panel(status: dict) -> None:
         )
 
 
-def _render_ml_panel(engine, *, ml_status: dict) -> None:
+def _render_activation_caption(activation: dict) -> None:
+    if not activation:
+        return
+    stage = activation.get("stage", "unknown")
+    summary = activation.get("summary", "")
+    cmd = activation.get("recommended_command")
+    blockers = activation.get("blockers") or []
+    top_blocker = blockers[0].get("detail") if blockers else None
+    detail = cmd or top_blocker or summary
+    st.caption(f"Activation: **{stage}** — {detail}")
+
+
+def _render_ml_panel(engine, *, ml_status: dict, activation: dict | None = None) -> None:
     cols = st.columns([3, 1])
     cols[0].subheader("ML signal scorer")
     if cols[1].button("Reload ML scorer", key="reload_ml_scorer"):
@@ -1225,6 +2247,8 @@ def _render_ml_panel(engine, *, ml_status: dict) -> None:
             st.rerun()
         else:
             st.warning("No ML scorer available — agentic runs without ML votes.")
+
+    _render_activation_caption(activation or {})
 
     if not ml_status.get("enabled"):
         st.info("ML scorer disabled (`FORTUNA_AGENTIC_ML_SCORER_ENABLED=0`).")
@@ -1277,9 +2301,17 @@ def _render_agentic_log_panel(agentic_status: dict) -> None:
 
     st.divider()
     _render_learning_summary(agentic_status.get("learning_summary") or {})
+    st.divider()
+    _render_nightly_alignment_summary(agentic_status.get("nightly_alignment") or {})
 
 
-def _render_rl_panel(engine, live_signals, *, rl_status: dict | None = None) -> None:
+def _render_rl_panel(
+    engine,
+    live_signals,
+    *,
+    rl_status: dict | None = None,
+    activation: dict | None = None,
+) -> None:
     """Render the RL policy status + metadata card.
 
     Shows a friendly empty-state when no checkpoint exists, otherwise
@@ -1297,6 +2329,8 @@ def _render_rl_panel(engine, live_signals, *, rl_status: dict | None = None) -> 
             st.rerun()
         else:
             st.warning("No RL policy available — deterministic fallback is active.")
+
+    _render_activation_caption(activation or {})
 
     if rl_status and rl_status.get("live_pointer"):
         st.caption(f"Live pointer: `{rl_status['live_pointer']}`")
@@ -1363,6 +2397,104 @@ def _render_learning_summary(summary: dict) -> None:
         st.dataframe(recent, use_container_width=True, hide_index=True)
 
 
+def _render_nightly_alignment_summary(summary: dict) -> None:
+    st.subheader("Recent nightly alignment")
+    report_count = int(summary.get("report_count", 0) or 0)
+    if report_count == 0:
+        st.caption("No recent nightly alignment evidence found yet.")
+        return
+    enabled_reports = int(summary.get("enabled_reports", 0) or 0)
+    aligned_reports = int(summary.get("aligned_reports", 0) or 0)
+    ratio = (
+        float(aligned_reports) / float(enabled_reports)
+        if enabled_reports > 0
+        else 0.0
+    )
+    latest_mix = str(summary.get("latest_target_mix") or "").strip()
+    latest_refreshed_mix = str(summary.get("latest_refreshed_target_mix") or "").strip()
+    latest_workflow_alignment = str(
+        summary.get("latest_workflow_research_alignment_summary") or ""
+    ).strip()
+    latest_workflow_mix = str(
+        summary.get("latest_workflow_research_alignment_target_mix") or ""
+    ).strip()
+    latest_workflow_target = str(
+        summary.get("latest_workflow_research_recommended_target") or ""
+    ).strip()
+    latest_workflow_discovery = str(
+        summary.get("latest_workflow_discovery_alignment_summary") or ""
+    ).strip()
+    latest_workflow_discovery_overlap = str(
+        summary.get("latest_workflow_discovery_overlap_symbols") or ""
+    ).strip()
+    latest_workflow_discovery_warning = bool(
+        summary.get("latest_workflow_discovery_warning", False)
+    )
+    latest_execution_text = format_latest_nightly_execution_posture(summary)
+    latest_discovery_text = format_latest_nightly_discovery_context(summary)
+    effective_target = str(summary.get("effective_refresh_target") or "").strip()
+    nightly_target = str(summary.get("recommended_refresh_target") or "").strip()
+    workflow_target_mismatch = bool(summary.get("workflow_target_mismatch", False))
+    cols = st.columns(4)
+    cols[0].metric("Reports", report_count)
+    cols[1].metric("Enabled", enabled_reports)
+    cols[2].metric("Aligned", aligned_reports)
+    cols[3].metric("Ratio", f"{ratio:.2f}")
+    if latest_mix:
+        st.caption(f"Latest target mix: `{latest_mix}`")
+    if latest_refreshed_mix:
+        st.caption(f"Latest refreshed target mix: `{latest_refreshed_mix}`")
+    if latest_workflow_alignment:
+        text = f"Latest workflow basket/research: `{latest_workflow_alignment}`"
+        if latest_workflow_mix:
+            text += f" | mix `{latest_workflow_mix}`"
+        st.caption(text)
+    if latest_workflow_target:
+        st.caption(f"Latest workflow target hint: `{latest_workflow_target}`")
+    if latest_workflow_discovery:
+        discovery_text = latest_workflow_discovery
+        if latest_workflow_discovery_overlap:
+            discovery_text += f" | overlap={latest_workflow_discovery_overlap}"
+        st.caption(f"Latest workflow discovery: `{discovery_text}`")
+    if latest_workflow_discovery_warning:
+        st.caption("Latest workflow discovery needs follow-up.")
+    if latest_execution_text:
+        st.caption(latest_execution_text)
+    if latest_discovery_text:
+        st.caption(latest_discovery_text)
+    if enabled_reports > 0 and aligned_reports < enabled_reports:
+        st.warning(
+            "Recent nightly basket/research alignment is drifting. "
+            f"Only {aligned_reports}/{enabled_reports} enabled reports carried target-mix evidence."
+        )
+    recommended_action = str(summary.get("recommended_action") or "").strip()
+    if recommended_action:
+        st.info(f"Suggested next step: {recommended_action}")
+    if effective_target:
+        st.caption(f"Suggested refresh target: `{effective_target}`")
+    if nightly_target:
+        st.caption(f"Nightly target hint: `{nightly_target}`")
+    recommended_command = str(summary.get("recommended_cli_command") or "").strip()
+    if recommended_command:
+        st.caption(f"Suggested command: `{recommended_command}`")
+    recommended_discovery_action = str(summary.get("recommended_discovery_action") or "").strip()
+    if recommended_discovery_action:
+        st.info(f"Suggested discovery follow-up: {recommended_discovery_action}")
+    recommended_discovery_command = str(
+        summary.get("recommended_discovery_cli_command") or ""
+    ).strip()
+    if recommended_discovery_command:
+        st.caption(f"Suggested discovery command: `{recommended_discovery_command}`")
+    if workflow_target_mismatch:
+        st.caption(
+            "Current workflow differs from nightly posture: "
+            f"nightly `{nightly_target}` vs current `{latest_workflow_target}`"
+        )
+    recent = summary.get("recent_rows") or []
+    if recent:
+        st.dataframe(recent, use_container_width=True, hide_index=True)
+
+
 def _render_promotion_caption(promotion: dict) -> None:
     run_id = promotion.get("run_id") or "—"
     promoted_at = promotion.get("promoted_at") or promotion.get("ts") or "—"
@@ -1370,6 +2502,24 @@ def _render_promotion_caption(promotion: dict) -> None:
     st.caption(
         f"Last promotion: run `{run_id}` by `{promoted_by}` at `{promoted_at}`"
     )
+    workflow_snapshot = str(promotion.get("workflow_snapshot_path") or "").strip()
+    if workflow_snapshot:
+        st.caption(f"Workflow snapshot: `{workflow_snapshot}`")
+    snapshot = promotion.get("workflow_snapshot") or {}
+    if snapshot:
+        source = snapshot.get("source") or "—"
+        timeframe = snapshot.get("timeframe") or "—"
+        days = snapshot.get("lookback_days")
+        lookback = f"{days}d" if days is not None else "—"
+        st.caption(
+            "Workflow summary: "
+            f"source=`{source}` timeframe=`{timeframe}` lookback=`{lookback}` "
+            f"universe={int(snapshot.get('universe_count', 0) or 0)} "
+            f"shortlist={int(snapshot.get('shortlist_count', 0) or 0)} "
+            f"briefing={int(snapshot.get('briefing_candidates', 0) or 0)} "
+            f"ml={int(snapshot.get('ml_count', 0) or 0)} "
+            f"rl={int(snapshot.get('rl_count', 0) or 0)}"
+        )
 
 
 if __name__ == "__main__":

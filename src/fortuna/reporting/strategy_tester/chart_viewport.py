@@ -62,6 +62,11 @@ def visible_bars_for_timeframe(timeframe: str) -> int:
     return max(40, int(per_day * sessions))
 
 
+def bars_per_nse_session(timeframe: str) -> int:
+    """Approximate bar count for one NSE cash session at this interval."""
+    return _BARS_PER_SESSION.get(timeframe.lower().strip(), 75)
+
+
 def normalize_to_naive_ist(ohlcv: pd.DataFrame) -> pd.DataFrame:
     """Strip tz / coerce object index → tz-naive IST wall-clock datetime64.
 

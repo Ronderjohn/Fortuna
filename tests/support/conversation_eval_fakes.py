@@ -163,6 +163,7 @@ def build_eval_settings(tmp_path: Path) -> Settings:
         data_cache_dir=tmp_path / "cache",
         duckdb_path=tmp_path / "cache" / "fortuna.duckdb",
         conversational_adapter_enabled=True,
+        signal_futures_oi_enabled=False,
     )
 
 

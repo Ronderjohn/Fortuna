@@ -206,6 +206,9 @@ def learning_row_from_decision(
     bar_idx: Optional[int] = None,
 ) -> LearningExample:
     nr = decision.notification_result
+    metadata = dict(decision.metadata)
+    if decision.regime and not metadata.get("regime"):
+        metadata["regime"] = str(decision.regime)
     return LearningExample(
         decision_hash=decision.decision_hash,
         bar_time=decision.bar_time.isoformat() if decision.bar_time else None,
@@ -221,7 +224,7 @@ def learning_row_from_decision(
         notification_deduped=nr.deduped if nr is not None else None,
         paper_submitted=False,
         outcome=LearningOutcome(status="pending"),
-        metadata=dict(decision.metadata),
+        metadata=metadata,
     )
 
 

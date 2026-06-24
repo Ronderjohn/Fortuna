@@ -15,18 +15,22 @@ def candles_to_dataframe(
     rows = list(candles)
     if not rows:
         raise ValueError(f"No candle data for {symbol}")
-
-    df = pd.DataFrame(
-        rows,
-        columns=["datetime", "open", "high", "low", "close", "volume"],
-    )
+    has_oi = any(len(row) >= 7 for row in rows)
+    columns = ["datetime", "open", "high", "low", "close", "volume"]
+    if has_oi:
+        columns.append("open_interest")
+    normalized = [list(row[: len(columns)]) for row in rows]
+    df = pd.DataFrame(normalized, columns=columns)
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.set_index("datetime")
     if df.index.tz is not None:
         df.index = df.index.tz_localize(None)
     df.index.name = "datetime"
 
-    for col in ("open", "high", "low", "close", "volume"):
+    numeric_cols = ["open", "high", "low", "close", "volume"]
+    if "open_interest" in df.columns:
+        numeric_cols.append("open_interest")
+    for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.dropna(subset=["open", "high", "low", "close"])
     df["symbol"] = symbol

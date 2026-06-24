@@ -598,6 +598,169 @@ class FortunaSessionEngine:
         """Read-only model health snapshot for the dashboard."""
         return self.advisory_tools().get_model_health()
 
+    def market_universe(
+        self,
+        *,
+        limit: int | None = None,
+        timeframe: str = "1d",
+        days: int = 30,
+        source: str = "auto",
+    ):
+        """Read-only liquid universe snapshot for training and agent callers."""
+        return self.advisory_tools().get_market_universe(
+            limit=limit,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+        )
+
+    def market_shortlist(
+        self,
+        *,
+        universe_limit: int = 10,
+        analysis_limit: int = 5,
+        timeframe: str = "5m",
+        days: int = 30,
+        source: str = "auto",
+    ):
+        """Analyze the top ranked market-universe candidates through the advisory stack."""
+        return self.advisory_tools().analyze_market_shortlist(
+            universe_limit=universe_limit,
+            analysis_limit=analysis_limit,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+        )
+
+    def training_candidates(
+        self,
+        *,
+        universe_limit: int = 15,
+        analysis_limit: int = 8,
+        timeframe: str = "5m",
+        days: int = 30,
+        source: str = "auto",
+    ):
+        """Return shortlist-derived ML/RL training candidates."""
+        return self.advisory_tools().get_training_candidates(
+            universe_limit=universe_limit,
+            analysis_limit=analysis_limit,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+        )
+
+    def training_research_plan(
+        self,
+        *,
+        universe_limit: int = 15,
+        analysis_limit: int = 8,
+        timeframe: str = "5m",
+        days: int = 30,
+        source: str = "auto",
+        selection_policy: str = "diversified",
+        refresh_data: bool = False,
+        refresh_target: str = "all",
+        refresh_timeframe: str | None = None,
+        refresh_days: int | None = None,
+        force_refresh: bool = False,
+    ):
+        """Return a typed training-research remediation plan for ML/RL prep."""
+        return self.advisory_tools().get_training_research_plan(
+            universe_limit=universe_limit,
+            analysis_limit=analysis_limit,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+            selection_policy=selection_policy,
+            refresh_data=refresh_data,
+            refresh_target=refresh_target,
+            refresh_timeframe=refresh_timeframe,
+            refresh_days=refresh_days,
+            force_refresh=force_refresh,
+        )
+
+    def multi_agent_workflow(
+        self,
+        *,
+        universe_limit: int = 15,
+        analysis_limit: int = 8,
+        timeframe: str = "5m",
+        days: int = 30,
+        source: str = "auto",
+        max_positions: int = 3,
+        max_per_exposure: int = 1,
+        max_same_side: int = 2,
+        ml_top_n: int = 5,
+        rl_top_n: int = 3,
+        selection_policy: str = "diversified",
+        refresh_research_data: bool = False,
+        research_refresh_target: str = "all",
+        research_refresh_timeframe: str | None = None,
+        research_refresh_days: int | None = None,
+        force_refresh: bool = False,
+    ):
+        """Return the explicit typed multi-agent workflow composition."""
+        return self.advisory_tools().get_multi_agent_workflow(
+            universe_limit=universe_limit,
+            analysis_limit=analysis_limit,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+            max_positions=max_positions,
+            max_per_exposure=max_per_exposure,
+            max_same_side=max_same_side,
+            ml_top_n=ml_top_n,
+            rl_top_n=rl_top_n,
+            selection_policy=selection_policy,
+            refresh_research_data=refresh_research_data,
+            research_refresh_target=research_refresh_target,
+            research_refresh_timeframe=research_refresh_timeframe,
+            research_refresh_days=research_refresh_days,
+            force_refresh=force_refresh,
+        )
+
+    def shortlist_briefing(
+        self,
+        *,
+        universe_limit: int = 10,
+        analysis_limit: int = 5,
+        timeframe: str = "5m",
+        days: int = 30,
+        source: str = "auto",
+    ):
+        """Return a cross-symbol briefing for the best shortlisted setups."""
+        return self.advisory_tools().get_shortlist_briefing(
+            universe_limit=universe_limit,
+            analysis_limit=analysis_limit,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+        )
+
+    def portfolio_allocation(
+        self,
+        *,
+        universe_limit: int = 10,
+        analysis_limit: int = 5,
+        max_positions: int = 3,
+        max_per_exposure: int = 1,
+        max_same_side: int = 2,
+        timeframe: str = "5m",
+        days: int = 30,
+        source: str = "auto",
+    ):
+        return self.advisory_tools().get_portfolio_allocation(
+            universe_limit=universe_limit,
+            analysis_limit=analysis_limit,
+            max_positions=max_positions,
+            max_per_exposure=max_per_exposure,
+            max_same_side=max_same_side,
+            timeframe=timeframe,
+            days=days,
+            source=source,
+        )
+
     def advisory_tools(self):
         """Shared typed tool surface for advisory callers."""
         from fortuna.agentic.tools import FortunaAdvisoryTools
@@ -749,6 +912,11 @@ class FortunaSessionEngine:
 
     def is_live(self) -> bool:
         return self._live is not None and self._live.is_running
+
+    def live_stats(self) -> dict[str, object]:
+        if self._live is None:
+            return {"tick_count": 0, "last_tick_at": None, "last_error": None}
+        return self._live.live_stats()
 
     def _refresh_strategies_after_bar(self) -> None:
         """Triggered when a new closed bar arrives — full backtest + signal refresh."""
@@ -991,6 +1159,7 @@ class FortunaSessionEngine:
                 metadata["bar_idx"] = bar_idx
         except Exception:  # noqa: BLE001
             logger.debug("[agentic] bar_idx lookup failed for %s", sym, exc_info=True)
+        metadata.update(self._market_context_metadata(signals or {}))
         if getattr(self.settings, "agentic_ml_scorer_enabled", False):
             try:
                 metadata["enriched"] = _enrich_ohlcv_for_ml(ohlcv)
@@ -1008,6 +1177,41 @@ class FortunaSessionEngine:
             account_summary=account_summary,
             metadata=metadata,
         )
+
+    def _market_context_metadata(self, signals: dict[str, Any]) -> dict[str, Any]:
+        actionable: list[tuple[str, Any]] = []
+        buy_count = 0
+        sell_count = 0
+        regime = ""
+        regime_confidence = 0.0
+        for name, sig in (signals or {}).items():
+            action = str(getattr(sig, "action", "") or "").upper()
+            if action in {"BUY", "SELL"}:
+                actionable.append((str(name), sig))
+                if action == "BUY":
+                    buy_count += 1
+                elif action == "SELL":
+                    sell_count += 1
+            raw_regime = str(getattr(sig, "regime", "") or "").upper()
+            if raw_regime and not regime:
+                regime = raw_regime
+            raw_conf = float(getattr(sig, "regime_confidence", 0.0) or 0.0)
+            regime_confidence = max(regime_confidence, raw_conf)
+        metadata: dict[str, Any] = {
+            "actionable_signal_count": len(actionable),
+            "buy_signal_count": buy_count,
+            "sell_signal_count": sell_count,
+        }
+        if actionable:
+            primary_name, primary_signal = actionable[0]
+            metadata["primary_signal"] = primary_name
+            metadata["primary_signal_action"] = str(
+                getattr(primary_signal, "action", "") or ""
+            ).upper()
+        if regime:
+            metadata["regime"] = regime
+            metadata["regime_confidence"] = round(regime_confidence, 4)
+        return metadata
 
     def _send_agentic_notification(self, decision):
         if self._notification_dispatcher is None:
@@ -1182,6 +1386,11 @@ class FortunaSessionEngine:
         with self._lock:
             if self._live is not None:
                 self._state.ohlcv = self._live.ohlcv
+                forming = self._live.forming_bar_df()
+                if forming is not None and not forming.empty:
+                    self._state.last_bar_time = pd.Timestamp(forming.index[-1])
+                elif self._state.ohlcv is not None and not self._state.ohlcv.empty:
+                    self._state.last_bar_time = pd.Timestamp(self._state.ohlcv.index[-1])
         if n > 0:
             self.refresh_live_signals()
         return n

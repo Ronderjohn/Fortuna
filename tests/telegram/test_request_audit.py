@@ -216,3 +216,45 @@ def test_build_audit_entry_captures_conversational_source():
     assert entry.source == "conversational"
     assert entry.source_confidence == 0.82
     assert "normalized" in str(entry.source_rationale)
+
+
+def test_build_audit_entry_redacts_secret_like_text():
+    interaction = _interaction("/search token=sk-secret-1234567890abcdefghijklmnop")
+    entry = build_audit_entry(
+        request_id="req9",
+        chat_id="99",
+        update_id=9,
+        interaction=interaction,
+    )
+    assert "sk-secret" not in entry.raw_text
+    assert "[REDACTED]" in entry.raw_text
+
+
+def test_audit_store_apply_retention_keeps_recent_rows(tmp_path: Path):
+    store = TelegramRequestAuditStore(tmp_path / "requests.jsonl")
+    store.append(
+        TelegramRequestAuditEntry(
+            request_id="old",
+            ts="2026-01-01T00:00:00+00:00",
+            chat_id="1",
+            raw_text="/help",
+            parsed_kind="help",
+            route_action="show_help",
+            response_chars=4,
+        )
+    )
+    store.append(
+        TelegramRequestAuditEntry(
+            request_id="new",
+            ts="2026-06-21T00:00:00+00:00",
+            chat_id="1",
+            raw_text="/help",
+            parsed_kind="help",
+            route_action="show_help",
+            response_chars=4,
+        )
+    )
+    pruned = store.apply_retention(keep_count=10, keep_days=30)
+    rows = store.read_recent(limit=10)
+    assert pruned == 1
+    assert [row["request_id"] for row in rows] == ["new"]

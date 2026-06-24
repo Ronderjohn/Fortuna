@@ -159,9 +159,10 @@ If you are changing agent behavior today:
 
 ## 8. Framework readiness and adoption gate
 
-Technical readiness plans live under:
+Technical readiness notes live under:
 
 - `docs/agentic_framework_readiness/`
+- [`docs/framework_adoption_gate.md`](framework_adoption_gate.md)
 
 The explicit yes/no adoption gate (Plan 07) is documented in
 [`docs/framework_adoption_gate.md`](framework_adoption_gate.md). Completing
@@ -174,6 +175,29 @@ Current state:
 - Fortuna is technically prepared for a narrow framework PoC above typed tools
 - Fortuna now also includes a native internal framework layer for safe
   conversational normalization in Telegram and dashboard assistant flows
+- Fortuna also now supports an optional OpenAI planner mode above the same
+  typed tool surface for routing freer-form operator requests
+- The typed operator surface now includes market-universe scans, shortlist
+  analysis, shortlist briefings, simple portfolio allocation, and
+  training-candidate preparation
+- The allocator is now slightly more state-aware: it considers existing open
+  positions and recent paper-closed learning outcomes when ranking the
+  constrained basket
+- The dashboard Assistant tab now also exposes a small workflow console for
+  universe, top-setups, allocation, and training-candidate review
+- Portfolio/exposure critique now includes directional crowding, overlapping
+  underlyings, and open-position overlap when account state is present
+- Training-candidate selection now carries a light exposure-aware penalty into
+  the ranked manifest so ML/RL prep is less likely to over-focus one underlying
+- Shortlist briefings now carry compatible selection rank / exposure-penalty
+  signals so operator-facing prioritization stays consistent upstream
+- Shortlist analysis now also carries the same ranking metadata, so downstream
+  briefing and training layers are inheriting a stable order rather than inventing one
+- The dashboard workflow console now shows universe -> shortlist -> briefing ->
+  allocation -> training candidates as explicit stages for operator inspection
+- Fortuna now also has a higher-level acceptance bundle path that can tie one
+  nightly report, workflow snapshot, promotion review evidence, and
+  model-health visibility into a single review artifact for operator sign-off
 - Fortuna is not automatically approved to adopt a framework in production
 
 Verify automated technical checks:
@@ -189,4 +213,5 @@ uv run python scripts/check_framework_readiness.py
 - `docs/telegram_trading_assistant.md`
 - `docs/agentic_framework_readiness/README.md`
 - `docs/framework_adoption_gate.md`
+- `docs/how_to_use_fortuna.md`
 - `AGENTS.md`

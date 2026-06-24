@@ -59,12 +59,16 @@ models/
 
 # Generated nightly / smoke reports.
 reports/
+!reports/.gitkeep
 
 # Local scratch notes / one-off command logs (not part of the repo).
 nightly_runs_cmds.txt
 
-# ─── Phase planning drafts (not part of the public repo) ─────────────────
+# ─── Old planning drafts / local debug scratch ────────────────────────────
+Phase_1.md
 Phase_2.md
+tmp_debug_allocator*/
+tmp_runtime_debug*/
 
 # ─── Notebooks ───────────────────────────────────────────────────────────
 .ipynb_checkpoints/

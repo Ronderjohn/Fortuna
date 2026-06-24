@@ -40,7 +40,6 @@ from fortuna.agentic.store import (
     NotificationAuditStore,
     resolve_pending_for_symbol,
 )
-from fortuna.agentic.tools import FortunaAdvisoryTools, build_advisory_tools
 from fortuna.ml.agent import MLSignalScorerAgent
 
 __all__ = [
@@ -82,3 +81,15 @@ __all__ = [
     "should_persist_decision",
     "to_signal_examples",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"FortunaAdvisoryTools", "build_advisory_tools"}:
+        from fortuna.agentic.tools import FortunaAdvisoryTools, build_advisory_tools
+
+        exports = {
+            "FortunaAdvisoryTools": FortunaAdvisoryTools,
+            "build_advisory_tools": build_advisory_tools,
+        }
+        return exports[name]
+    raise AttributeError(name)

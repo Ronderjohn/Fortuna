@@ -31,6 +31,43 @@ def _ohlcv_two_sessions() -> pd.DataFrame:
     )
 
 
+def test_focus_uses_explicit_timeframe_for_intraday() -> None:
+    """Explicit 5m timeframe anchors on the latest session, not 30 daily bars."""
+    ohlcv = _ohlcv_two_sessions()
+    spec_daily = build_lightweight_charts_spec(ohlcv=ohlcv, timeframe="1d")
+    assert spec_daily[0]["chart"]["_initialFocus"]["bars"] <= 30
+
+    spec_5m = build_lightweight_charts_spec(ohlcv=ohlcv, timeframe="5m")
+    focus_5m = spec_5m[0]["chart"]["_initialFocus"]["bars"]
+    # Last session has 10 bars — do not pad with the prior Friday session.
+    assert focus_5m == 10
+
+
+def test_focus_current_session_only_when_forming() -> None:
+    """Monday morning: viewport must not pull Friday bars across the weekend."""
+    fri = pd.date_range("2026-05-29 10:00", periods=66, freq="5min")
+    mon = pd.date_range("2026-06-01 09:15", periods=9, freq="5min")
+    idx = fri.append(mon)
+    rng = np.random.default_rng(1)
+    close = 100 + np.cumsum(rng.normal(0, 0.2, len(idx)))
+    ohlcv = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.5,
+            "low": close - 0.5,
+            "close": close,
+            "volume": rng.integers(1000, 5000, len(idx)),
+        },
+        index=idx,
+    )
+    spec = build_lightweight_charts_spec(ohlcv=ohlcv, timeframe="5m")
+    assert spec[0]["chart"]["_initialFocus"]["bars"] == 9
+    candles = spec[0]["series"][0]["data"]
+    # All visible focus candles should be from Monday (no Friday leakage).
+    mon_times = {c["time"] for c in candles[-9:]}
+    assert len(mon_times) == 9
+
+
 def test_time_axis_uses_real_unix_seconds() -> None:
     """Bars must be monotonic unix seconds, with Fri→Mon gap of ~2.5 days."""
     ohlcv = _ohlcv_two_sessions()

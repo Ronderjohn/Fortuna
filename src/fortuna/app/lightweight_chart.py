@@ -36,7 +36,12 @@ from typing import Any, Optional
 import pandas as pd
 
 from fortuna.app.live_signals import LiveSignal
-from fortuna.reporting.strategy_tester.chart_viewport import normalize_to_naive_ist
+from fortuna.data.timeframes import is_intraday, normalize_timeframe
+from fortuna.reporting.strategy_tester.chart_viewport import (
+    bars_per_nse_session,
+    normalize_to_naive_ist,
+    visible_bars_for_timeframe,
+)
 
 _TV_BULL = "#26A69A"
 _TV_BEAR = "#EF5350"
@@ -309,25 +314,49 @@ def _nearest(ts_to_unix: dict[pd.Timestamp, int], ts: pd.Timestamp) -> Optional[
     return ts_to_unix[nearest]
 
 
-def _focus_bar_count(ohlcv: pd.DataFrame) -> tuple[int, bool]:
+def _focus_bar_count(
+    ohlcv: pd.DataFrame,
+    timeframe: Optional[str] = None,
+) -> tuple[int, bool]:
     """Compute how many of the rightmost bars must fit in the initial view.
 
-    For intraday timeframes the focus is *today's session* (or the latest
-    session present in the data, e.g. on a Sunday it falls back to Friday).
-    For daily/weekly/monthly timeframes there is no "today" granularity, so
-    we focus on the last 30 bars.
+    When ``timeframe`` is provided (dashboard load interval), use it instead of
+    inferring from bar spacing — stale or mixed-interval caches otherwise look
+    like a daily/month chart even when the UI shows 5m.
 
     Returns ``(target_bars, is_intraday)``.
     """
     if len(ohlcv) < 2:
         return max(len(ohlcv), 30), False
+
+    if timeframe:
+        tf = normalize_timeframe(timeframe)
+        intraday = is_intraday(tf)
+        if not intraday:
+            return min(30, len(ohlcv)), False
+        last_date = pd.Timestamp(ohlcv.index[-1]).normalize()
+        same_day_mask = pd.Series(ohlcv.index).map(
+            lambda ts: pd.Timestamp(ts).normalize() == last_date
+        )
+        today_count = int(same_day_mask.sum())
+        session_bars = bars_per_nse_session(tf)
+        per_view = min(visible_bars_for_timeframe(tf), len(ohlcv))
+        # While today's session is still forming, anchor the viewport on *today
+        # only*. Padding the window with prior-session bars leaves a Fri→Mon
+        # (or overnight) time gap that compresses today's candles and makes the
+        # axis look like intraday bars are missing (e.g. 09:25 → 09:50).
+        if today_count > 0 and today_count < session_bars:
+            return max(today_count, 1), True
+        target = max(today_count, per_view)
+        return target, True
+
     deltas = ohlcv.index.to_series().diff().dropna()
     median_delta = deltas.median()
     interval_seconds = float(median_delta.total_seconds()) if median_delta else 300.0
-    is_intraday = interval_seconds < 86_400  # < 1 day
+    intraday = interval_seconds < 86_400  # < 1 day
 
-    if not is_intraday:
-        return 30, False
+    if not intraday:
+        return min(30, len(ohlcv)), False
 
     last_date = pd.Timestamp(ohlcv.index[-1]).normalize()
     same_day_mask = pd.Series(ohlcv.index).map(
@@ -383,6 +412,7 @@ def build_lightweight_charts_spec(
     visible_bars: int = 75,
     history_multiplier: int = 12,
     estimated_width_px: int = 1200,
+    timeframe: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Build the ``renderLightweightCharts`` config for one strategy chart.
 
@@ -400,14 +430,18 @@ def build_lightweight_charts_spec(
         return []
 
     ohlcv = normalize_to_naive_ist(ohlcv)
-    history_window = max(visible_bars * max(1, history_multiplier), 200)
+    if timeframe and is_intraday(timeframe):
+        # Keep a few sessions of pan history, not weeks of 5m bars on first paint.
+        history_window = max(visible_bars * 4, visible_bars + 80, 200)
+    else:
+        history_window = max(visible_bars * max(1, history_multiplier), 200)
     if len(ohlcv) > history_window:
         ohlcv = ohlcv.iloc[-history_window:]
 
     ts_to_unix = _build_time_lookup(ohlcv)
     candles = _candle_rows(ohlcv, ts_to_unix)
 
-    focus_bars, _is_intraday = _focus_bar_count(ohlcv)
+    focus_bars, _is_intraday = _focus_bar_count(ohlcv, timeframe=timeframe)
     right_padding = max(6, min(20, focus_bars // 5 + 4))
     # Stretch the right edge to 15:30 IST so the full NSE session is visible
     # (matters when the live feed is a few bars behind wall-clock).

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import pandas as pd
@@ -49,6 +50,10 @@ class SmartAPILiveBarFeed:
         self._inst: Optional[InstrumentRef] = None
         self._ws: Any = None
         self._thread: Optional[threading.Thread] = None
+        self._tick_count = 0
+        self._last_tick_at: Optional[float] = None
+        self._last_error: Optional[str] = None
+        self._stats_lock = threading.Lock()
         self._aggregator = BarAggregator(
             timeframe,
             on_bar=on_bar or self._on_bar_closed,
@@ -59,6 +64,21 @@ class SmartAPILiveBarFeed:
     @property
     def aggregator(self) -> BarAggregator:
         return self._aggregator
+
+    @property
+    def tick_count(self) -> int:
+        with self._stats_lock:
+            return self._tick_count
+
+    @property
+    def last_tick_at(self) -> Optional[float]:
+        with self._stats_lock:
+            return self._last_tick_at
+
+    @property
+    def last_error(self) -> Optional[str]:
+        with self._stats_lock:
+            return self._last_error
 
     def _on_bar_closed(self, bar: OhlcvBar) -> None:
         row = pd.DataFrame(
@@ -97,11 +117,20 @@ class SmartAPILiveBarFeed:
             tick = decode_ws_message(message)
             if tick is None:
                 return
+            if tick.get("subscription_mode") in (0, 1):
+                return
             self._aggregator.update(tick)
+            with self._stats_lock:
+                self._tick_count += 1
+                self._last_tick_at = time.monotonic()
         except Exception as e:
+            with self._stats_lock:
+                self._last_error = str(e)
             logger.warning("Tick parse error: %s", e)
 
     def _on_error(self, _wsapp: object, error: object) -> None:
+        with self._stats_lock:
+            self._last_error = str(error)
         logger.error("SmartAPI WebSocket error: %s", error)
 
     def _on_close(self, _wsapp: object, close_status_code: object, close_msg: object) -> None:

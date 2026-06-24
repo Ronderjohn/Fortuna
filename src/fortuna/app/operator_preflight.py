@@ -6,9 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from fortuna.agentic.contracts import RuntimeReadinessSummary
+from fortuna.app.model_activation import build_lane_activation_summary
+from fortuna.app.runtime_readiness import build_runtime_readiness_summary
 from fortuna.config.settings import Settings
 from fortuna.models.metadata import ModelKind
 from fortuna.models.registry import live_pointer_path
+from fortuna.observability.recorder import workflow_boundary
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,7 @@ class PreflightCheck:
 @dataclass
 class OperatorPreflightResult:
     checks: list[PreflightCheck] = field(default_factory=list)
+    runtime_readiness: Optional[RuntimeReadinessSummary] = None
 
     @property
     def failures(self) -> list[PreflightCheck]:
@@ -46,18 +51,59 @@ class OperatorPreflightResult:
         return all(ch is None or ch.status != "pass" for ch in (ml, rl))
 
 
+def _activation_detail(summary) -> str:
+    if summary.recommended_command:
+        return summary.recommended_command
+    if summary.blockers:
+        return summary.blockers[0].detail
+    return summary.summary
+
+
 def run_operator_preflight(
     settings: Settings,
     *,
     symbol: Optional[str] = None,
     strict: bool = False,
 ) -> OperatorPreflightResult:
+    sym = (symbol or settings.default_symbol or "").upper().strip()
+    with workflow_boundary(
+        settings,
+        event_name="operator_preflight",
+        module="fortuna.app.operator_preflight",
+        workflow_id="operator_preflight",
+        symbol=sym or None,
+    ) as span:
+        result = _run_operator_preflight_body(
+            settings,
+            symbol=symbol,
+            strict=strict,
+            sym=sym,
+        )
+        readiness = result.runtime_readiness
+        if readiness is not None:
+            span.set_context(
+                overall_posture=readiness.overall_posture,
+                nightly_posture=readiness.nightly_posture,
+                ok=result.ok,
+                check_count=len(result.checks),
+            )
+        if not result.ok:
+            span.set_status("warn")
+        return result
+
+
+def _run_operator_preflight_body(
+    settings: Settings,
+    *,
+    symbol: Optional[str],
+    strict: bool,
+    sym: str,
+) -> OperatorPreflightResult:
     result = OperatorPreflightResult()
     root = settings.project_root
     models_root = settings.resolve_path(Path("models"))
     ml_base = settings.resolve_path(settings.ml_scorer_artifact_dir)
     ml_root = ml_base.parent if ml_base.name == "validated" else ml_base
-    sym = (symbol or settings.default_symbol or "").upper().strip()
 
     result.add("settings", "pass", f"loaded env={settings.env} config root={root}")
     log_dir = settings.resolve_path(settings.agentic_log_dir)
@@ -108,6 +154,36 @@ def run_operator_preflight(
                     status="fail",
                     detail=check.detail,
                 )
+    result.runtime_readiness = build_runtime_readiness_summary(
+        settings,
+        preflight=result,
+        strict=strict,
+        symbol=sym or None,
+    )
+    if settings.agentic_enabled or settings.agentic_ml_scorer_enabled:
+        ml_act = build_lane_activation_summary(
+            settings,
+            lane="ml",
+            symbol=sym or None,
+            models_root=models_root,
+            ml_base=ml_root,
+        )
+        rl_act = build_lane_activation_summary(
+            settings,
+            lane="rl",
+            symbol=sym or None,
+            models_root=models_root,
+        )
+        result.add(
+            "ml_activation",
+            "pass" if ml_act.active else "warn",
+            f"{ml_act.stage} — {_activation_detail(ml_act)}",
+        )
+        result.add(
+            "rl_activation",
+            "pass" if rl_act.active else "warn",
+            f"{rl_act.stage} — {_activation_detail(rl_act)}",
+        )
     return result
 
 
@@ -116,10 +192,29 @@ def render_preflight(result: OperatorPreflightResult) -> str:
     status = "PASS" if result.ok else "FAIL"
     lines.append(f"Fortuna operator preflight: {status}")
     for check in result.checks:
+        if check.name in {"ml_activation", "rl_activation"}:
+            continue
         badge = check.status.upper()
         lines.append(f"- [{badge}] {check.name}: {check.detail}")
-    mode = "deterministic-only" if result.deterministic_only() else "ensemble/advisory"
-    lines.append(f"- Runtime expectation: {mode}")
+    readiness = result.runtime_readiness
+    if readiness is not None:
+        lines.append(f"- Runtime posture: {readiness.overall_posture}")
+        lines.append(f"- Nightly posture: {readiness.nightly_posture}")
+        lines.append(f"- Readiness summary: {readiness.summary}")
+        if readiness.scaling is not None:
+            lines.append(
+                f"- Scaling posture: {readiness.scaling.basket_posture} — "
+                f"{readiness.scaling.summary}"
+            )
+    else:
+        mode = "deterministic-only" if result.deterministic_only() else "ensemble/advisory"
+        lines.append(f"- Runtime expectation: {mode}")
+    for check in result.checks:
+        if check.name not in {"ml_activation", "rl_activation"}:
+            continue
+        badge = check.status.upper()
+        label = "ML activation" if check.name == "ml_activation" else "RL activation"
+        lines.append(f"- [{badge}] {label}: {check.detail}")
     if result.ok:
         lines.append("- For a deeper API probe, run: uv run python scripts/test_smartapi_env.py")
     return "\n".join(lines)
@@ -201,14 +296,19 @@ def _check_telegram(result: OperatorPreflightResult, settings: Settings) -> None
     if not settings.telegram_enabled:
         result.add("telegram", "warn", "disabled")
         return
-    required = [
-        settings.telegram_bot_token,
-        settings.telegram_chat_id,
-    ]
-    if all(bool(v) for v in required):
-        result.add("telegram", "pass", "Telegram bot token and chat id complete")
-    else:
-        result.add("telegram", "warn", "enabled but Telegram settings are incomplete")
+    has_bot = bool(settings.telegram_bot_token)
+    allowed = settings.telegram_allowed_chat_id_set()
+    has_chat_scope = bool(settings.telegram_chat_id) or bool(allowed)
+    if not has_bot or not has_chat_scope:
+        result.add("telegram", "warn", "enabled but Telegram bot token or allowlist is incomplete")
+        return
+    if bool(getattr(settings, "signal_image_input_enabled", False)) and bool(
+        getattr(settings, "signal_openai_required_for_images", True)
+    ):
+        if not bool(getattr(settings, "openai_api_key", "").strip()):
+            result.add("telegram", "warn", "image intake enabled but OpenAI API key missing")
+            return
+    result.add("telegram", "pass", "Telegram bot token and chat scope complete")
 
 
 def _find(checks: list[PreflightCheck], name: str) -> Optional[PreflightCheck]:

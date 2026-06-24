@@ -1,10 +1,10 @@
 # Fortuna
 
 Institutional-grade autonomous quant research system for **NSE intraday equities**.
-A deterministic, offline-first research and advisory stack built around a
-Streamlit dashboard that mirrors TradingView's chart + Strategy Tester workflow,
-with reproducible backtests, walk-forward validation, model promotion, optional
-agentic advisory, paper learning, and downstream Telegram notifications.
+A deterministic, advisory-first stack built around typed analysis services,
+Telegram-first signal delivery, and a slim Streamlit operator console, with
+reproducible backtests, walk-forward validation, model promotion, optional
+agentic advisory, paper learning, and auditable downstream notifications.
 
 Fortuna is **advisory-first**:
 - deterministic strategy signals remain the transparent baseline,
@@ -27,12 +27,11 @@ Fortuna is **advisory-first**:
 | **Strategy reporting** | TradingView-style report bundle (perf / risk / intraday / trades CSV) | `reporting/strategy_tester/` |
 | **Search & arena** | Param-grid expansion + batch evaluator + leaderboards (CPU/GPU) | `search/`, `arena/`, `compute/` |
 | **Paper league** | Walk-forward black-box folds + adaptive parameter learning | `paper/` |
-| **Dashboard** | Streamlit + Lightweight Charts v5 (CDN embed) + stdlib HTTP stream server | `app/`, `app/streamlit_app.py` |
+| **Operator console** | Streamlit + Lightweight Charts v5 (CDN embed) + stdlib HTTP stream server | `app/`, `app/streamlit_app.py` |
 | **Live read-only feed** | SmartAPI WebSocket 2.0 → bar aggregator → in-memory + Parquet append | `data/sources/smartapi_live.py`, `app/live_session.py` |
 
-The dashboard is the **primary** way to use Fortuna. Everything else (CLI scripts,
-arena, institutional pipeline, paper league) writes the same artifact format the
-dashboard already understands.
+Telegram is now the **primary** end-user surface for Fortuna. The dashboard
+remains as an operator/admin console over the same typed runtime and artifacts.
 
 ### Advisory stack
 
@@ -46,7 +45,11 @@ deterministic research stack:
 - **Model promotion registry** — auditable live pointers for ML/RL artifacts
 - **Telegram alerts** — deduped, throttled, downstream of final decisions only
 - **Operator runbook** — [docs/operator_runbook.md](docs/operator_runbook.md)
+- **How to use Fortuna** — [docs/how_to_use_fortuna.md](docs/how_to_use_fortuna.md)
 - **Current system map** — [docs/current_system_flow.md](docs/current_system_flow.md)
+- **Telegram quickstart** — [docs/telegram_bot_quickstart.md](docs/telegram_bot_quickstart.md)
+- **Operator runbook** — [docs/operator_runbook.md](docs/operator_runbook.md)
+- **How to use Fortuna** — [docs/how_to_use_fortuna.md](docs/how_to_use_fortuna.md)
 
 Default mode remains **advisory**. Deterministic dashboard signals continue when
 ML, RL, agentic, or Telegram subsystems are disabled or unavailable.
@@ -111,11 +114,34 @@ uv run python scripts/run_dashboard.py
 ```
 
 Helpful next steps:
+- Start with the practical user guide: [docs/how_to_use_fortuna.md](docs/how_to_use_fortuna.md)
 - Validate SmartAPI env more deeply: `uv run python scripts/test_smartapi_env.py`
 - Run the Telegram assistant: `uv run python scripts/run_telegram_bot.py`
+- **Operator loop (advisory):** universe → shortlist → briefing → allocation →
+  training research → nightly → promotion → acceptance review — see
+  [docs/operator_runbook.md](docs/operator_runbook.md) and
+  [docs/current_system_flow.md](docs/current_system_flow.md)
+- Build a liquid market universe: `uv run python scripts/build_market_universe.py --help`
+- Analyze the top ranked shortlist: `uv run python scripts/analyze_market_shortlist.py --help`
+- Prepare shortlist-driven training candidates: `uv run python scripts/prepare_training_candidates.py --help`
+- Build a typed ML/RL training research plan: `uv run python scripts/build_training_research_plan.py --help`
+- Brief the top shortlisted setups: `uv run python scripts/brief_market_shortlist.py --help`
+- Allocate shortlisted setups under simple portfolio limits: `uv run python scripts/allocate_market_shortlist.py --help`
+- Export a full workflow snapshot artifact: `uv run python scripts/build_workflow_snapshot.py --help`
+- Export a higher-level acceptance bundle artifact:
+  `uv run python scripts/build_acceptance_bundle.py --help`
+- Rehearse the candidate-style nightly acceptance path locally:
+  `uv run python scripts/run_nightly_acceptance_dry_run.py --help`
 - Train RL: `uv run --group rl python scripts/run_rl_train.py --help`
-- Train ML scorer: `uv run python scripts/train_ml_signal_scorer.py --help`
+- Train ML scorer: `uv run --group ml python scripts/train_ml_signal_scorer.py --help`
 - Promote validated artifacts: `uv run python scripts/promote_model.py --help`
+- Promotion CLIs can optionally carry `--workflow-snapshot <path>` so the live
+  pointer and registry audit reference the same shortlist/briefing/candidate
+  artifact used during review
+- Review the promoted artifact and linked workflow context:
+  `uv run python scripts/review_promotion.py --help`
+- Promotion review can also export markdown or JSON artifacts for later audit:
+  `uv run python scripts/review_promotion.py --kind rl_policy --out reports/promotion_review.md`
 
 Minimal advisory + Telegram flags:
 
@@ -133,9 +159,83 @@ FORTUNA_CONVERSATIONAL_ADAPTER_ENABLED=true
 FORTUNA_CONVERSATIONAL_ADAPTER_MODE=heuristic
 ```
 
+Optional OpenAI planner mode above the same typed tools:
+
+```env
+FORTUNA_CONVERSATIONAL_ADAPTER_ENABLED=true
+FORTUNA_CONVERSATIONAL_ADAPTER_MODE=openai
+FORTUNA_OPENAI_API_KEY=...
+FORTUNA_OPENAI_MODEL=gpt-5.4-mini
+```
+
 See [docs/telegram_trading_assistant.md](docs/telegram_trading_assistant.md)
 for the Telegram bot workflow, supported commands, and examples for equities,
-futures, and options.
+futures, options, market-universe scans, shortlist briefings, allocation views,
+and direct training-research inspection.
+
+For the current operator flow and product posture, use:
+
+- [docs/how_to_use_fortuna.md](docs/how_to_use_fortuna.md)
+- [docs/operator_runbook.md](docs/operator_runbook.md)
+- [docs/telegram_bot_quickstart.md](docs/telegram_bot_quickstart.md)
+- [docs/current_system_flow.md](docs/current_system_flow.md)
+
+For future OpenAI-backed agent work, Fortuna now also exposes a typed
+market-universe surface that can shortlist liquid, trend-relevant symbols from
+an optional Screener CSV export plus local OHLCV ranking, a shortlist
+analysis surface that can critique top candidates before deeper review, and a
+training-candidate surface that can suggest which symbols deserve ML/RL data
+refresh and model-prep attention. The same typed layer also includes shortlist
+briefings so Telegram or an OpenAI planner can summarize the top setups
+without bypassing the advisory core. It now also includes an explicit typed
+multi-agent workflow surface, so local callers can request one composed
+universe/critic/briefing/allocation/research pass instead of stitching those
+roles together by hand. Telegram `/workflow` can now use that same explicit
+team surface directly instead of manually composing each stage itself. The
+dashboard workflow console now also refreshes through that same typed team
+response, so the operator surfaces share one multi-agent backbone.
+
+That market-universe ranking can now also apply a light adaptive weighting from
+recent paper-closed outcomes, so symbols with stronger recent realized advisory
+quality can be nudged up while recently weak exposures are nudged down. This is
+kept intentionally small and fail-soft; liquidity and trend remain the primary drivers.
+The ranked universe now also carries a typed market-context snapshot
+(`regime`, `volume_ratio`, `activity_score`) so shortlist and training flows can
+see more than raw liquidity alone.
+The adaptive universe policy is now a bit richer too: it blends symbol memory
+with smaller action-level, regime-level, and global recency-weighted outcome
+biases, so the watchlist can reflect both "this name has worked lately" and
+"this directional/context regime has worked lately" without becoming opaque.
+The universe stage can now also absorb light recurring evidence from recent
+candidate-driven nightly reports, so symbols that keep surviving nightly
+training-candidate selection and promotion can earn a bounded discovery boost.
+Decision-time learning rows now also preserve a compact signal-context bundle
+(`primary_signal`, signal counts, regime confidence), so downstream training
+candidate ranking can start learning from which setup family has actually been
+working, not only from symbol-level outcomes.
+Training-candidate manifests now also preserve setup-family/adaptive-score
+context such as `winning_strategy` and `adaptive_score_adjustment`, which makes
+the ML/RL refresh queue easier to audit and compare across nightly runs.
+Training-candidate ranking can now also learn lightly from recent successful
+candidate-driven nightly reports, so symbols that keep reappearing in recurring
+ML/RL prep evidence can be nudged upward in a bounded, auditable way.
+There is now also a typed training-research plan layer that can turn those
+shortlist-driven ML/RL candidates into a concrete refresh list, optionally
+backfilling the selected symbols immediately for model-prep workflows.
+That research-plan artifact is no longer only for review: recent nightly
+`training_research_plan.json` evidence can now lightly bias both universe
+ranking and shortlist-derived training-candidate ranking, so recurring refresh
+intent starts feeding back into future discovery and model-prep selection.
+The shortlist allocator is also a little more portfolio-shaped now: beyond
+simple caps, it can apply a bounded portfolio critic that penalizes or skips
+redundant weak setups when the basket is getting too same-side, too
+same-regime, too watch-grade, or too high-risk. There is now also an optional
+research-alignment pass that can compare the shortlist basket to the current
+typed ML/RL training-research plan and push back on setups that are drifting
+away from the names the research loop is currently reinforcing. That alignment
+logic can now also distinguish refreshed ML/RL prep evidence from plan-only
+support, so same-side baskets can lightly prefer setups backed by actually
+refreshed training-research rows.
 
 ---
 
@@ -164,6 +264,155 @@ What you get:
   by the chart iframe at ~2.5 s)
 - Tabs: **Chart**, **Leaderboard**, **Performance**, **Strategy detail**, **Models**,
   **Assistant**, and optional paper/execution monitoring surfaces
+- The **Assistant** tab now includes quick actions for liquid-universe scans,
+  shortlist briefings, allocation views, ML/RL training-candidate selection,
+  direct training-research inspection, and direct symbol analysis
+- The **Assistant** tab also includes a small workflow console with current
+  universe, shortlist, allocation, training-candidate, and training-research
+  tables for faster operator review
+- A typed portfolio allocator now exists above shortlist briefing so the stack
+  can turn ranked setups into a constrained basket under simple exposure limits
+- That allocator now also considers current open positions and recent paper-closed
+  learning outcomes, so basket selection is less likely to ignore live overlap
+  or keep favoring recently weak exposures
+- The allocator now also carries typed regime/risk metadata and applies a small,
+  flag-gated context weighting pass, so selected baskets can expose
+  `allocation_score`, `risk_bucket`, and `sizing_hint` instead of only raw weight
+- The allocator now also supports bounded regime and high-risk caps, which helps
+  the shortlist-to-basket step avoid quietly concentrating in one market regime
+  or stacking too many weak-quality setups
+- Shortlist briefings now warn on directional crowding, overlapping underlyings,
+  and overlap with already-open positions when account state is available
+- Training-candidate ranking now also applies light exposure penalties so ML/RL
+  candidate manifests prefer less crowded names when multiple setups overlap
+- Training-candidate ranking can now also apply a light recent-outcome bias, so
+  symbols with stronger recent paper-closed advisory quality can move up the
+  ML/RL prep queue while recently weak exposures are nudged down
+- Training candidates now retain typed market-context fields from the universe
+  stage, so ML/RL prep can distinguish trending, ranging, and more active names
+- Candidate-driven nightly runs can now opt into a diversified training basket
+  policy with `--candidate-selection-policy diversified`, which rotates across
+  action/regime buckets instead of only taking the top-ranked names in order
+- Shortlist briefings now share the same exposure-aware prioritization idea, so
+  the top-setups view and the training-candidate view are more consistent
+- Shortlist analysis itself now carries selection rank / exposure-penalty
+  metadata, so the ranking story is consistent from shortlist to briefing to training
+- The dashboard workflow console now exposes the pipeline stage by stage:
+  liquid universe, ranked shortlist, curated briefing, constrained allocation,
+  and final training candidates
+- Candidate-driven nightly runs can now emit the same workflow snapshot artifact
+  automatically, and they now emit the resolved `training_candidates.json`
+  artifact too, so training review and operator review can reference one report
+- That workflow snapshot now carries allocation-stage evidence too, so review
+  can see not just the shortlist and candidates, but also which setups were
+  actually selected under portfolio constraints
+- Workflow snapshots can now also preserve allocation research-alignment notes,
+  so repeated reviews can see whether the shortlist basket stayed aligned with
+  the current typed ML/RL training-research plan
+- Workflow snapshots now also preserve training-research refresh evidence, so
+  in-app remediation runs can show how many ML/RL prep rows were refreshed
+  instead of leaving that action only in transient dashboard state
+- Workflow snapshots and promotion/model-review summaries can now also surface
+  the top adaptive universe note, so ranking shifts from recent paper outcomes
+  are visible instead of implicit
+- Nightly promotions now carry that workflow snapshot path into the live pointer
+  payload and `models/registry/promotions.jsonl` audit trail
+- The dashboard **Models** review surface now shows that linked workflow
+  snapshot path and a compact workflow summary alongside the latest promotion
+  metadata
+- Nightly can also emit archived promotion-review artifacts under the report
+  directory, so training, promotion, and review stay bundled together
+- There is now a higher-level acceptance bundle path that can tie workflow
+  snapshot, promotion review, and model-health evidence into one reviewable
+  markdown or JSON artifact for operator sign-off
+- That acceptance bundle can now also read the latest nightly JSON report
+  directly, so recurring training/promotion artifacts can flow into one
+  acceptance review without manually restitching the evidence
+- For candidate-driven nightly runs, the acceptance bundle now also checks for
+  expected basket/training-candidate/workflow/promotion step coverage, and it
+  validates that the referenced `training_candidates.json` artifact exists, so
+  the report structure itself becomes part of the audit trail
+- The acceptance bundle can now also surface whether allocation
+  research-alignment evidence was visible in the workflow snapshot, which makes
+  the portfolio basket / ML-RL prep relationship easier to audit over time
+- The acceptance bundle can now also warn when a workflow snapshot requested a
+  training-research refresh but did not actually refresh any rows, which makes
+  remediation attempts part of the audit trail too
+- Candidate-driven nightly markdown reports can now surface that same
+  allocation research-alignment summary directly in the workflow section, so
+  repeated runs expose basket / research coherence without needing a separate
+  acceptance pass first
+- Model-health summaries can now also scan recent nightly reports and show a
+  compact allocation-research alignment trend, so operators can spot recent
+  coherence or drift without opening each nightly artifact by hand
+- Acceptance bundles can now warn when that recent nightly alignment trend
+  drops below a simple configured ratio, which makes drift show up during
+  higher-level review instead of only in raw model-health data
+- Promotion review output can now surface that same recent nightly alignment
+  warning, so model review shows both the linked workflow snapshot and recent
+  basket/research drift context in one place
+- Acceptance and promotion review can now also warn when the current workflow
+  snapshot shows weak basket/research overlap, so a selected basket drifting
+  away from the current ML/RL prep plan shows up during review
+- Acceptance-bundle and promotion-review JSON exports now also persist the typed
+  remediation posture directly: recommended refresh target, force-refresh mode,
+  and the suggested CLI command
+- The dashboard **Models** surface can now show the same recent nightly
+  alignment trend and drift warning, so operators can spot coherence issues
+  during normal runtime review without exporting reports
+- When that recent nightly alignment drops below a configurable threshold, the
+  model-health surface can now suggest a concrete next step: refresh the
+  training research plan and review candidate-selection policy before the next
+  promotion or nightly cycle
+- That recommendation now also carries a concrete typed remediation command,
+  centered on `scripts/build_training_research_plan.py`, so the operator can
+  move from warning to action with less guesswork
+- The dashboard workflow console can now load the typed training-research plan
+  directly, including a dedicated refresh action and research tab, so drift
+  remediation is closer to the normal operator loop
+- That in-app training-research remediation path can now optionally refresh
+  targeted ML/RL data too, so the operator can move from drift warning to
+  updated prep evidence in one bounded workflow
+- Promotion review and nightly markdown reports now also surface that
+  training-research remediation evidence more explicitly, so refresh attempts
+  stay visible in recurring review paths and not only in acceptance exports
+- Recent nightly feedback now also distinguishes between planned
+  training-research rows and rows that actually refreshed ML/RL prep data, so
+  future universe ranking and training-candidate selection can weight executed
+  refresh evidence more strongly than paper plans alone
+- Workflow snapshots, nightly summaries, and model-health alignment trends can
+  now also carry refreshed allocator research-target mix, so operators can see
+  whether the actual selected basket is staying aligned with recently refreshed
+  ML/RL prep evidence over time
+- Acceptance and promotion review can now warn not just on general
+  basket/research drift, but also on weak refreshed-alignment coverage, so
+  repeated divergence from recently refreshed prep evidence shows up more
+  directly in the multi-agent review loop
+- The allocator itself can now also lean on recent nightly training-research
+  execution evidence, so same-side baskets can penalize weaker setups when the
+  current side already has stronger recurring refreshed/promoted research support
+- Model-health remediation suggestions can now bias the recommended
+  training-research refresh target toward `ml`, `rl`, or `all` from the recent
+  refreshed-alignment mix, so the next-step command is a little more specific
+  to the actual drift pattern
+- The dashboard workflow console now follows that same guidance by preselecting
+  the in-app training-research refresh target from the suggested remediation
+  command until the operator deliberately overrides it
+- When refreshed-alignment drift is severe, the same workflow console can now
+  also prefill `Refresh research data` and, for the harshest cases,
+  `Force research refresh`, so the in-app remediation path is closer to the
+  suggested recovery flow by default
+- There is now a bounded local dry-run harness for that same path, so we can
+  generate a synthetic candidate-nightly evidence stack and verify the
+  acceptance flow without touching live data or real training jobs
+- That dry-run now also emits its nightly JSON/markdown report through the
+  actual nightly report writer, so the rehearsal exercises more of the real
+  reporting path than a hand-written fixture alone
+- Candidate-driven nightly runs now also emit a typed
+  `training_research_plan.json` artifact, so recurring ML/RL refresh intent is
+  preserved alongside `training_candidates.json` and `workflow_snapshot.json`
+- That dry-run now also includes model-health visibility through the same
+  acceptance bundle, so the rehearsal covers registry/promotion health too
 
 See [docs/smartapi_charts.md](docs/smartapi_charts.md) for the chart architecture.
 
@@ -444,8 +693,8 @@ orchestration · distributed training infrastructure · dedicated ML training CL
 The Phase 1 deliverable is the deterministic foundation; Phases 1–6 add the advisory
 ensemble that operators use via the dashboard and optional Telegram.
 
-See [Phase_1.md](Phase_1.md) for the original architecture vision and
-[docs/operator_runbook.md](docs/operator_runbook.md) for day-to-day operations.
+See [docs/operator_runbook.md](docs/operator_runbook.md) for day-to-day
+operations.
 
 ---
 

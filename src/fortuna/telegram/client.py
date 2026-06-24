@@ -38,6 +38,21 @@ class TelegramBotClient:
         ).encode("utf-8")
         return self._call("sendMessage", payload)
 
+    def get_file(self, file_id: str) -> dict[str, Any]:
+        payload = urllib.parse.urlencode({"file_id": str(file_id)}).encode("utf-8")
+        doc = self._call("getFile", payload)
+        return dict(doc.get("result") or {})
+
+    def download_file(self, file_path: str) -> bytes:
+        path = str(file_path or "").lstrip("/")
+        if not path:
+            raise RuntimeError("Telegram file path is missing")
+        url = f"https://api.telegram.org/file/bot{self.bot_token}/{path}"
+        req = urllib.request.Request(url, method="GET")
+        opener = self.opener or urllib.request.urlopen
+        with opener(req, self.timeout) as resp:  # type: ignore[misc]
+            return resp.read()
+
     def _call(self, method: str, payload: bytes) -> dict[str, Any]:
         url = f"https://api.telegram.org/bot{self.bot_token}/{method}"
         req = urllib.request.Request(

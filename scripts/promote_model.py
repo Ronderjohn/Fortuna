@@ -9,10 +9,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from fortuna.models import ModelKind, PromotionRecord, PromotionStatus
-from fortuna.models.promotion import promote as registry_promote
+from fortuna.app.workflow_snapshot import (
+    format_workflow_snapshot_summary,
+    load_workflow_snapshot_summary,
+)
+from fortuna.models import PromotionRecord, PromotionStatus
 from fortuna.models.promotion import compute_ml_advisory_ready
+from fortuna.models.promotion import promote as registry_promote
 from fortuna.rl.training.checkpoint import PolicyCheckpoint
+
+
+def _resolve_workflow_snapshot(path_text: str) -> str | None:
+    text = str(path_text or "").strip()
+    if not text:
+        return None
+    path = Path(text)
+    if not path.is_file():
+        raise SystemExit(f"workflow snapshot not found: {path}")
+    return str(path.resolve())
 
 
 def _locate_rl_checkpoint(
@@ -57,6 +71,7 @@ def promote_rl(
     *,
     allow_rejected: bool = False,
     symbol: str | None = None,
+    workflow_snapshot_path: str | None = None,
 ) -> Path:
     source_dir = _locate_rl_checkpoint(run_id, models_root, allow_rejected=allow_rejected)
     cp = PolicyCheckpoint.read(source_dir / "metadata.json")
@@ -69,6 +84,7 @@ def promote_rl(
         source_dir,
         status=PromotionStatus.VALIDATED,
     )
+    record.workflow_snapshot_path = workflow_snapshot_path
     return registry_promote(record, models_root=models_root, promoted_by="cli")
 
 
@@ -78,6 +94,7 @@ def promote_ml(
     ml_base: Path,
     *,
     allow_rejected: bool = False,
+    workflow_snapshot_path: str | None = None,
 ) -> Path:
     from fortuna.ml.artifacts import load_metadata
 
@@ -92,6 +109,7 @@ def promote_ml(
         status=PromotionStatus.VALIDATED,
         advisory_ready=ready,
     )
+    record.workflow_snapshot_path = workflow_snapshot_path
     return registry_promote(record, models_root=models_root, promoted_by="cli", ml_base=ml_base)
 
 
@@ -103,15 +121,22 @@ def main() -> int:
     parser.add_argument("--ml-base", default="models/ml_signal_scorer")
     parser.add_argument("--symbol", default="", help="Optional RL symbol override")
     parser.add_argument("--allow-rejected", action="store_true")
+    parser.add_argument(
+        "--workflow-snapshot",
+        default="",
+        help="Optional workflow snapshot JSON to reference from the promotion audit/pointer",
+    )
     args = parser.parse_args()
 
     models_root = Path(args.models_root)
+    workflow_snapshot_path = _resolve_workflow_snapshot(args.workflow_snapshot)
     if args.kind == "rl_policy":
         out = promote_rl(
             args.run_id,
             models_root,
             allow_rejected=args.allow_rejected,
             symbol=args.symbol or None,
+            workflow_snapshot_path=workflow_snapshot_path,
         )
     else:
         out = promote_ml(
@@ -119,8 +144,12 @@ def main() -> int:
             models_root,
             Path(args.ml_base),
             allow_rejected=args.allow_rejected,
+            workflow_snapshot_path=workflow_snapshot_path,
         )
     print(f"promoted run_id={args.run_id} -> {out}")
+    summary = load_workflow_snapshot_summary(workflow_snapshot_path)
+    if summary is not None:
+        print(format_workflow_snapshot_summary(summary))
     return 0
 
 

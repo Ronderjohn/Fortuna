@@ -38,6 +38,62 @@ flowchart LR
 
 Primary API: `AgenticOrchestrator.decide(context)` → `AgentDecision`.
 
+## Multi-agent workflow (typed, advisory-only)
+
+Beyond per-symbol orchestration, Fortuna exposes a typed multi-agent workflow for
+operator discovery, briefing, allocation, and training research. This sits above
+deterministic signals and does not replace `AgentDecision` synthesis.
+
+Key modules:
+
+- `src/fortuna/app/multi_agent_team.py` — composes the full workflow
+- `src/fortuna/app/agent_roles/` — thin role wrappers over existing services
+- `src/fortuna/app/operator_workflow.py` — workflow snapshot export
+
+### Agent roles (thin wrappers)
+
+Each role in `src/fortuna/app/agent_roles/` exposes `compose_role()` (and
+optional `run()`) over existing app services — no duplicated business logic:
+
+| Role | Wraps |
+|---|---|
+| `liquidity_scout` | Screener/seed liquidity ranking |
+| `activity_scout` | OHLCV activity, regime, trend emphasis |
+| `universe_scout` | Combined universe discovery coordinator |
+| `instrument_analyst` | Shortlist instrument analysis |
+| `briefing_agent` | Shortlist briefing |
+| `portfolio_critic` | Portfolio allocation / critic |
+| `research_planner` | ML/RL training-research plan |
+| `operations_monitor` | Nightly alignment / model-health posture |
+
+### Split follow-up lanes
+
+Training-research and nightly remediation guidance now distinguishes three recovery
+lanes instead of one generic refresh command:
+
+- **discovery** — rebuild the market-universe pass (Screener/liquidity + activity)
+- **research** — refresh the typed ML/RL training-research plan
+- **execution** — address execution-path drift from recent nightly runs
+
+Acceptance bundles and promotion review surface `recommended_follow_up_lane` and
+per-lane targets/actions via shared helpers in
+`src/fortuna/app/acceptance_alignment.py`.
+
+### Scout cohorts and support
+
+Discovery scouts emit typed cohorts (liquidity, activity, volume-dense, overlap)
+that flow into shortlist analysis, training candidates, and research planning.
+When scout agreement breaks ambiguous refresh-target ties, acceptance output
+records `scout_support_target` and `scout_support_summary`.
+
+### Cross-artifact alignment
+
+`CrossArtifactAlignmentSummary` (in `src/fortuna/agentic/contracts.py`) compares
+discovery, research, execution, and promotion guidance across nightly reports,
+workflow snapshots, and promotion review. Both acceptance bundles and promotion
+review export this summary so operators can spot drift without opening each
+artifact separately.
+
 ## Runtime wiring
 
 [`FortunaSessionEngine`](../src/fortuna/app/session_engine.py) builds the orchestrator

@@ -83,7 +83,7 @@ Codex is the systems architect and integration reviewer:
 Cursor is the engineering cockpit:
 
 - Implements bounded tasks in the IDE.
-- Works from phase prompts in `docs/cursor_phase_prompts.md`.
+- Works from the current task brief plus repo docs.
 - Produces focused diffs for one phase at a time.
 - Does not silently broaden scope.
 
@@ -138,69 +138,25 @@ Avoid these anti-patterns:
 - Sending Telegram alerts directly from low-level signal functions.
 - Letting dashboard UI own business logic that belongs in `agentic/`.
 
-## Current Phase Roadmap
+## Current Product Posture
 
-Phase 1: ML Signal Scorer
+Fortuna has shifted to a **Telegram-first signal product** with a slim
+operator console behind it.
 
-- Build supervised labels from historical strategy signals and forward outcomes.
-- Train/calibrate a signal-quality model.
-- Expose inference as an agent vote, not as a hard override.
+Current priority order:
 
-Phase 2: Paper Learning Dataset
+1. keep the deterministic and typed advisory core reliable
+2. keep Telegram request handling fast, isolated, and auditable
+3. use ML and RL only when promoted, cheap, and clearly additive
+4. treat Streamlit as an operator/admin surface, not the main user product
+5. keep multimodal and OpenAI-backed routing above typed tools only
 
-- Turn agentic decisions and later outcomes into durable labeled examples.
-- Feed labels into ML scorer and adaptive learning.
+Canonical operational docs:
 
-Phase 3: Agentic Ensemble Upgrade
-
-- Extend `agentic/` to combine deterministic, ML, RL, regime, portfolio, and
-  risk evidence with explainable confidence.
-
-Phase 4: RL Policy Improvement
-
-- Improve reward shaping, evaluation, per-symbol checkpoints, and promotion.
-- Keep deterministic fallback and checkpoint metadata strict.
-
-Phase 5: Promotion and Monitoring
-
-- Create gates for model promotion into live advisory.
-- Add dashboard/reporting views for model health, drift, and paper performance.
-
-Phase 6: Telegram Advisory Hardening
-
-- Improve notification templates, dedupe, throttling, and audit trail.
-- Keep Telegram downstream of final `AgentDecision` only.
-
-Phase 7: Documentation
-
-- Operator and contributor docs under `docs/` — see
-  [agentic_advisory.md](docs/agentic_advisory.md),
-  [operator_runbook.md](docs/operator_runbook.md),
-  [ml_signal_scorer.md](docs/ml_signal_scorer.md),
-  [rl_policy_workflow.md](docs/rl_policy_workflow.md).
-
-Pre-Framework Readiness:
-
-- Before introducing LangGraph/LangChain or similar orchestration layers,
-  prefer the readiness plans under `docs/agentic_framework_readiness/`.
-- Sequence the work as:
-  1. typed advisory contracts
-  2. shared tool surfaces
-  3. conversational evaluation suite
-  4. conversation boundary/router
-  5. traceability and request audit
-  6. Telegram interface hardening
-  7. framework adoption gate — see [framework_adoption_gate.md](docs/framework_adoption_gate.md)
-- Default adoption outcome is **`not_yet`** until documented product sign-off (criterion 5).
-- Do not treat "framework readiness" as permission to move core trading logic
-  into an opaque conversational runtime.
-- The repo now contains implemented readiness artifacts: typed advisory
-  contracts, shared advisory tools, a conversation eval suite, conversation
-  routing boundaries, Telegram request audit, and a framework adoption gate.
-- The repo now also includes a native, flag-gated conversational adapter for
-  Telegram and dashboard assistant flows. Treat it as a layer above typed tools,
-  not as a replacement for the advisory core.
-- Verify technical criteria: `uv run python scripts/check_framework_readiness.py`
+- [docs/how_to_use_fortuna.md](docs/how_to_use_fortuna.md)
+- [docs/operator_runbook.md](docs/operator_runbook.md)
+- [docs/telegram_bot_quickstart.md](docs/telegram_bot_quickstart.md)
+- [docs/current_system_flow.md](docs/current_system_flow.md)
 
 ## Expected Test Discipline
 
@@ -222,6 +178,7 @@ uv run pytest tests/execution/test_session_wiring.py -q
 uv run pytest tests/rl -q
 uv run pytest tests/features -q
 uv run ruff check src/fortuna/agentic tests/agentic
+uv run python scripts/build_acceptance_bundle.py --help
 ```
 
 ## Settings Principles
@@ -234,6 +191,63 @@ Existing agentic flags:
 - `FORTUNA_AGENTIC_PAPER_LEARNING_ENABLED`
 - `FORTUNA_AGENTIC_ML_SCORER_ENABLED`
 - `FORTUNA_AGENTIC_LOG_DIR`
+- `FORTUNA_MARKET_UNIVERSE_SCREENER_CSV`
+- `FORTUNA_MARKET_UNIVERSE_TRADABLE_UNIVERSE_CSV`
+- `FORTUNA_MARKET_UNIVERSE_SMARTAPI_SEED_LIMIT`
+- `FORTUNA_MARKET_UNIVERSE_AUTO_PREFER_SMARTAPI`
+- `FORTUNA_MARKET_UNIVERSE_DEFAULT_LIMIT`
+- `FORTUNA_MARKET_UNIVERSE_TURNOVER_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_VOLUME_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_TREND_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_VOLUME_RATIO_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_ACTIVITY_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_ACTION_BIAS_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_REGIME_BIAS_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_SIGNAL_BIAS_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_GLOBAL_BIAS_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_ADAPTIVE_RECENCY_HALFLIFE`
+- `FORTUNA_MARKET_UNIVERSE_NIGHTLY_FEEDBACK_ENABLED`
+- `FORTUNA_MARKET_UNIVERSE_NIGHTLY_FEEDBACK_MAX_BOOST`
+- `FORTUNA_MARKET_UNIVERSE_NIGHTLY_FEEDBACK_LOOKBACK_REPORTS`
+- `FORTUNA_MARKET_UNIVERSE_NIGHTLY_REFRESH_BONUS_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_NIGHTLY_REPORT_DIR`
+- `FORTUNA_MARKET_UNIVERSE_LONG_HORIZON_FEEDBACK_ENABLED`
+- `FORTUNA_MARKET_UNIVERSE_LONG_HORIZON_LOOKBACK_REPORTS`
+- `FORTUNA_MARKET_UNIVERSE_EXECUTED_LANE_BOOST_WEIGHT`
+- `FORTUNA_MARKET_UNIVERSE_LONG_HORIZON_HALFLIFE`
+- `FORTUNA_MARKET_UNIVERSE_FUNDAMENTALS_OVERLAY_ENABLED`
+- `FORTUNA_MARKET_UNIVERSE_FUNDAMENTALS_OVERLAY_CSV`
+- `FORTUNA_MARKET_UNIVERSE_FUNDAMENTALS_OVERLAY_MAX_BOOST`
+- `FORTUNA_MARKET_UNIVERSE_FUNDAMENTALS_QUALITY_WEIGHT`
+- `FORTUNA_SCALING_BASKET_SMALL_MAX`
+- `FORTUNA_SCALING_BASKET_MEDIUM_MAX`
+- `FORTUNA_SCALING_ENFORCE_BASKET_CAP`
+- `FORTUNA_NIGHTLY_REPORT_RETENTION_ENABLED`
+- `FORTUNA_NIGHTLY_REPORT_RETENTION_COUNT`
+- `FORTUNA_OBSERVABILITY_ENABLED`
+- `FORTUNA_OBSERVABILITY_LOG_DIR`
+- `FORTUNA_OBSERVABILITY_EXPORTER`
+- `FORTUNA_OBSERVABILITY_OTLP_ENDPOINT`
+- `FORTUNA_TRAINING_CANDIDATE_NIGHTLY_FEEDBACK_ENABLED`
+- `FORTUNA_TRAINING_CANDIDATE_VOLUME_RATIO_BONUS_WEIGHT`
+- `FORTUNA_TRAINING_CANDIDATE_TRENDING_BONUS_WEIGHT`
+- `FORTUNA_TRAINING_CANDIDATE_SCOUT_OVERLAP_BOOST`
+- `FORTUNA_TRAINING_CANDIDATE_SCOUT_VOLUME_DENSE_BOOST`
+- `FORTUNA_TRAINING_CANDIDATE_NIGHTLY_FEEDBACK_MAX_BOOST`
+- `FORTUNA_TRAINING_CANDIDATE_NIGHTLY_FEEDBACK_LOOKBACK_REPORTS`
+- `FORTUNA_TRAINING_CANDIDATE_NIGHTLY_REFRESH_BONUS_WEIGHT`
+- `FORTUNA_TRAINING_CANDIDATE_NIGHTLY_REPORT_DIR`
+- `FORTUNA_TRAINING_CANDIDATE_REMEDIATION_PRESSURE_ENABLED`
+- `FORTUNA_TRAINING_CANDIDATE_REMEDIATION_MAX_BOOST`
+- `FORTUNA_SHORTLIST_DISCOVERY_ALIGNMENT_ENABLED`
+- `FORTUNA_SHORTLIST_DISCOVERY_ALIGNMENT_BOOST`
+- `FORTUNA_SHORTLIST_DISCOVERY_ALIGNMENT_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CONTEXT_WEIGHTING_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_REGIME_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_ACTIVITY_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_MAX_SINGLE_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_MAX_HIGH_RISK_POSITIONS`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_MAX_PER_REGIME`
 - `FORTUNA_MODEL_REGISTRY_ENABLED`
 - `FORTUNA_MODEL_PROMOTION_REQUIRED`
 - `FORTUNA_TELEGRAM_ENABLED`
@@ -244,6 +258,48 @@ Existing agentic flags:
 - `FORTUNA_TELEGRAM_QUIET_HOURS_ENABLED`
 - `FORTUNA_TELEGRAM_BOT_TOKEN`
 - `FORTUNA_TELEGRAM_CHAT_ID`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CONTEXT_WEIGHTING_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_REGIME_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_ACTIVITY_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_MAX_SINGLE_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_MAX_HIGH_RISK_POSITIONS`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_MAX_PER_REGIME`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_SAME_SIDE_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_SAME_REGIME_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_SAME_STRATEGY_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_OPEN_SAME_EXPOSURE_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_WEAKER_SAME_SIDE_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_WATCH_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_HIGH_RISK_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_DISCOVERY_ALIGNMENT_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_WEAKER_DISCOVERY_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_RESEARCH_ALIGNMENT_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_MISSING_RESEARCH_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_WEAKER_RESEARCH_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_UNREFRESHED_RESEARCH_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_WEAKER_NIGHTLY_RESEARCH_PENALTY`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_CRITIC_BLOCK_THRESHOLD`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_NIGHTLY_FEEDBACK_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_NIGHTLY_FEEDBACK_LOOKBACK_REPORTS`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_NIGHTLY_REFRESH_BONUS_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_NIGHTLY_PROMOTE_BONUS_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_NIGHTLY_REPORT_DIR`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_FRESHNESS_PREFERENCE_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_FRESHNESS_PREFERENCE_WEIGHT`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_SAME_TARGET_BALANCE_ENABLED`
+- `FORTUNA_PORTFOLIO_ALLOCATOR_SAME_TARGET_BALANCE_PENALTY`
+- `FORTUNA_MODEL_STATUS_NIGHTLY_ALIGNMENT_ENABLED`
+- `FORTUNA_MODEL_STATUS_NIGHTLY_ALIGNMENT_LOOKBACK_REPORTS`
+- `FORTUNA_MODEL_STATUS_NIGHTLY_REPORT_DIR`
+- `FORTUNA_MODEL_STATUS_NIGHTLY_ALIGNMENT_RECOMMENDATION_RATIO`
+- `FORTUNA_ACCEPTANCE_BUNDLE_NIGHTLY_ALIGNMENT_MIN_ENABLED_REPORTS`
+- `FORTUNA_ACCEPTANCE_BUNDLE_NIGHTLY_ALIGNMENT_WARN_RATIO`
+- `FORTUNA_ACCEPTANCE_BUNDLE_NIGHTLY_REFRESHED_ALIGNMENT_WARN_RATIO`
+- `FORTUNA_ACCEPTANCE_BUNDLE_TEAM_RESEARCH_ALIGNMENT_WARN_RATIO`
+- `FORTUNA_NIGHTLY_AUTOMATION_ENABLED`
+- `FORTUNA_NIGHTLY_FAIL_FAST_GLOBAL_BLOCKERS`
+- `FORTUNA_NIGHTLY_LANE_GATING_ENABLED`
 
 Add new flags only when they are needed to control runtime behavior, model
 artifact locations, or production-like risk.

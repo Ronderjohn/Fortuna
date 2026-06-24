@@ -1,0 +1,50 @@
+# Clean first-run profile for Fortuna advisory use.
+#
+# Use this when you want a conservative operator-first posture while validating
+# the current build:
+#   uv run python scripts/run_operator_preflight.py --config configs/intraday_first_run.yaml
+#   uv run python scripts/run_dashboard.py
+
+env: development
+log_level: INFO
+
+data:
+  cache_dir: data/market_cache
+  duckdb_path: data/fortuna.duckdb
+  default_symbol: RELIANCE.NS
+  default_timeframe: "5m"
+  default_days: 20
+  data_source: smartapi
+  cache_max_age_days: 1
+  cache_max_age_hours: 4
+
+backtest:
+  init_cash: 100000
+  fees: 0.0005
+  slippage: 0.0005
+
+scoring:
+  validation_threshold: 45.0
+  max_drawdown_threshold: 0.20
+  min_trades: 5
+  min_profit_factor: 1.0
+  weights:
+    sharpe: 0.30
+    total_return: 0.10
+    drawdown_penalty: 0.30
+    profit_factor: 0.15
+    consistency: 0.15
+
+app:
+  parallel_workers: 4
+  live_refresh_seconds: 5
+  strategy_dirs:
+    - strategies/intraday
+    - strategies/generated
+    - strategies/builtin
+
+paths:
+  strategies_generated: strategies/generated
+  strategies_validated: strategies/validated
+  strategies_rejected: strategies/rejected
+  logs: logs

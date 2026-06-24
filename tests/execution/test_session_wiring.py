@@ -32,6 +32,8 @@ def base_settings(tmp_path) -> Settings:
         execution_account_sync=False,
         agentic_enabled=False,
         agentic_paper_learning_enabled=False,
+        model_registry_enabled=False,
+        model_promotion_required=True,
         telegram_enabled=False,
     )
 
@@ -54,6 +56,10 @@ def test_model_status_safe_when_subsystems_disabled(base_settings):
     assert status.rl.load_error == "no_generator"
     payload = status.to_dict()
     assert payload["registry_enabled"] is False
+    assert status.activation is not None
+    assert status.activation.ml.stage == "disabled"
+    assert status.activation.rl.stage == "disabled"
+    assert payload["activation"]["ml"]["stage"] == "disabled"
 
 
 def test_session_engine_exposes_conversational_assistant(base_settings):
@@ -61,6 +67,21 @@ def test_session_engine_exposes_conversational_assistant(base_settings):
     assistant = eng.conversational_assistant()
     assert assistant.settings is eng.settings
     assert assistant.tools is not None
+
+
+def test_market_universe_passes_source_to_advisory_tools(base_settings, monkeypatch):
+    eng = FortunaSessionEngine(base_settings)
+
+    class FakeTools:
+        def get_market_universe(self, **kwargs):
+            return kwargs
+
+    monkeypatch.setattr(eng, "advisory_tools", lambda: FakeTools())
+    result = eng.market_universe(limit=12, timeframe="15m", days=25, source="screener")
+    assert result["limit"] == 12
+    assert result["timeframe"] == "15m"
+    assert result["days"] == 25
+    assert result["source"] == "screener"
 
 
 def test_router_built_when_flag_set(base_settings):
@@ -130,6 +151,8 @@ def test_agentic_decision_computed_from_signals(base_settings, tmp_path):
         in_position=False,
         rl_confidence="agree",
         rl_action="BUY",
+        regime="TRENDING",
+        regime_confidence=0.82,
     )
     rl_sig = LiveSignal(
         strategy_name="RL:test",
@@ -302,6 +325,10 @@ def test_agentic_ml_enabled_without_artifact_fails_soft(base_settings, tmp_path)
     decision = decisions["RELIANCE.NS"]
     assert decision.action.value == "BUY"
     assert decision.metadata["bar_idx"] == 0
+    assert decision.metadata["primary_signal"] == "orb"
+    assert decision.metadata["primary_signal_action"] == "BUY"
+    assert decision.metadata["actionable_signal_count"] == 2
+    assert decision.metadata["buy_signal_count"] == 2
     assert "enriched" not in decision.metadata
 
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+from fortuna.agentic.openai_router import OpenAIConversationPlanner, OpenAIPlannerError
 from fortuna.app.symbol_catalog import SymbolCatalog
 from fortuna.config.settings import Settings
 from fortuna.data.instruments import InstrumentRegistry
@@ -38,6 +39,37 @@ _ANALYZE_HINTS = frozenset(
 )
 _SEARCH_HINTS = frozenset({"search", "find", "lookup", "show", "list"})
 _HELP_HINTS = frozenset({"help", "commands"})
+_UNIVERSE_HINTS = frozenset(
+    {"universe", "liquid", "liquidity", "active", "volume", "trending", "watchlist"}
+)
+_BRIEF_HINTS = frozenset(
+    {"brief", "summary", "summarize", "shortlist", "setups", "candidates", "top"}
+)
+_TRAINING_HINTS = frozenset(
+    {"training", "train", "dataset", "candidate", "candidates", "ml", "rl", "refresh", "backfill"}
+)
+_ALLOCATION_HINTS = frozenset(
+    {"allocate", "allocation", "portfolio", "positions", "carry", "sizing", "weight", "weights"}
+)
+_WORKFLOW_HINTS = frozenset(
+    {"workflow", "pipeline", "stage", "stages", "full", "endtoend", "overview"}
+)
+_HEALTH_HINTS = frozenset({"health", "models", "model", "registry", "promotion", "status"})
+_RISK_HINTS = frozenset(
+    {
+        "risk",
+        "risky",
+        "lot",
+        "lots",
+        "stop",
+        "sl",
+        "invalidation",
+        "budget",
+        "capital",
+        "loss",
+        "losses",
+    }
+)
 _STOPWORDS = frozenset(
     {
         "a",
@@ -73,7 +105,7 @@ _OPTION_RE = re.compile(
     re.IGNORECASE,
 )
 _FUTURE_RE = re.compile(
-    r"\b(?P<underlying>[A-Z][A-Z0-9]+)\s+(?:FUT|FUTURE)"
+    r"\b(?P<underlying>[A-Z][A-Z0-9]+)\s+(?:FUT|FUTURE|FUTURES)"
     r"(?:\s+(?P<expiry>\d{1,2}[A-Z]{3}\d{4}|\d{1,2}-[A-Z]{3}-\d{4}|\d{4}-\d{2}-\d{2}))?\b",
     re.IGNORECASE,
 )
@@ -86,6 +118,7 @@ _RAW_EXPIRY_RE = re.compile(
 class AdapterSource(str, Enum):
     COMMAND = "command"
     CONVERSATIONAL = "conversational"
+    OPENAI = "openai"
 
 
 @dataclass(frozen=True)
@@ -122,7 +155,32 @@ class FortunaConversationalAdapter:
                 confidence=1.0,
                 rationale="explicit command matched the primary parser",
             )
+        mode = (
+            str(getattr(self.settings, "conversational_adapter_mode", "heuristic"))
+            .strip()
+            .lower()
+        )
+        if mode == "openai":
+            plan = self._plan_openai(req.raw_text)
+            if plan is not None:
+                return plan
         return self._plan_conversational(req.raw_text)
+
+    def _plan_openai(self, text: str) -> Optional[AdapterPlan]:
+        planner = OpenAIConversationPlanner(self.settings)
+        if not planner.available():
+            return None
+        try:
+            plan = planner.plan(text)
+        except OpenAIPlannerError:
+            return None
+        return AdapterPlan(
+            request=plan.request,
+            route=plan.route,
+            source=AdapterSource.OPENAI,
+            confidence=plan.confidence,
+            rationale=plan.rationale,
+        )
 
     def _plan_conversational(self, text: str) -> AdapterPlan:
         raw = (text or "").strip()
@@ -152,9 +210,18 @@ class FortunaConversationalAdapter:
 
         future_req = self._future_request(raw, timeframe=timeframe, days=days)
         if future_req is not None:
+            kind = TelegramRequestKind.RISK if words & _RISK_HINTS else TelegramRequestKind.ANALYZE
+            request = future_req if kind == TelegramRequestKind.ANALYZE else TelegramRequest(
+                TelegramRequestKind.RISK,
+                raw_text=future_req.raw_text,
+                query=future_req.query,
+                symbol=future_req.symbol,
+                timeframe=future_req.timeframe,
+                days=future_req.days,
+            )
             return AdapterPlan(
-                request=future_req,
-                route=route_telegram_request(future_req),
+                request=request,
+                route=route_telegram_request(request),
                 source=AdapterSource.CONVERSATIONAL,
                 confidence=0.9,
                 rationale="freeform request matched a futures contract pattern",
@@ -168,6 +235,118 @@ class FortunaConversationalAdapter:
                 source=AdapterSource.CONVERSATIONAL,
                 confidence=0.84,
                 rationale="freeform request asked for usage help",
+            )
+
+        if words & _HEALTH_HINTS and "stock" not in words:
+            req = TelegramRequest(TelegramRequestKind.HEALTH, raw_text=raw)
+            return AdapterPlan(
+                request=req,
+                route=route_telegram_request(req),
+                source=AdapterSource.CONVERSATIONAL,
+                confidence=0.8,
+                rationale="freeform request asked about model or runtime health",
+            )
+
+        if words & _TRAINING_HINTS and (words & _UNIVERSE_HINTS or "stock" in words):
+            target = "all"
+            if "ml" in words and "rl" not in words:
+                target = "ml"
+            elif "rl" in words and "ml" not in words:
+                target = "rl"
+            req = TelegramRequest(
+                TelegramRequestKind.CANDIDATES,
+                raw_text=raw,
+                timeframe=timeframe,
+                days=max(days, 20),
+                limit=8,
+                source="auto",
+                target=target,
+                query=raw,
+            )
+            return AdapterPlan(
+                request=req,
+                route=route_telegram_request(req),
+                source=AdapterSource.CONVERSATIONAL,
+                confidence=0.75,
+                rationale=(
+                    "freeform request looked like shortlist-driven ML/RL "
+                    "training candidate selection"
+                ),
+            )
+
+        if words & _ALLOCATION_HINTS and (words & _UNIVERSE_HINTS or words & _BRIEF_HINTS):
+            req = TelegramRequest(
+                TelegramRequestKind.ALLOCATE,
+                raw_text=raw,
+                timeframe=timeframe,
+                days=max(days, 20),
+                limit=5,
+                source="auto",
+                query=raw,
+            )
+            return AdapterPlan(
+                request=req,
+                route=route_telegram_request(req),
+                source=AdapterSource.CONVERSATIONAL,
+                confidence=0.76,
+                rationale=(
+                    "freeform request looked like a portfolio allocation "
+                    "or carry-together selection request"
+                ),
+            )
+
+        if words & _WORKFLOW_HINTS and (words & _UNIVERSE_HINTS or "stock" in words):
+            req = TelegramRequest(
+                TelegramRequestKind.WORKFLOW,
+                raw_text=raw,
+                timeframe=timeframe,
+                days=max(days, 20),
+                limit=8,
+                source="auto",
+                query=raw,
+            )
+            return AdapterPlan(
+                request=req,
+                route=route_telegram_request(req),
+                source=AdapterSource.CONVERSATIONAL,
+                confidence=0.74,
+                rationale="freeform request looked like a stage-by-stage workflow summary request",
+            )
+
+        if words & _BRIEF_HINTS and ("stock" in words or words & _UNIVERSE_HINTS):
+            req = TelegramRequest(
+                TelegramRequestKind.BRIEF,
+                raw_text=raw,
+                timeframe=timeframe,
+                days=max(days, 20),
+                limit=5,
+                source="auto",
+                query=raw,
+            )
+            return AdapterPlan(
+                request=req,
+                route=route_telegram_request(req),
+                source=AdapterSource.CONVERSATIONAL,
+                confidence=0.74,
+                rationale="freeform request looked like a top-setups or shortlist briefing request",
+            )
+
+        if words & _UNIVERSE_HINTS and "analyze" not in words:
+            req = TelegramRequest(
+                TelegramRequestKind.UNIVERSE,
+                raw_text=raw,
+                timeframe="1d",
+                days=max(days, 20),
+                limit=10,
+                source="auto",
+                query=raw,
+            )
+            return AdapterPlan(
+                request=req,
+                route=route_telegram_request(req),
+                source=AdapterSource.CONVERSATIONAL,
+                confidence=0.76,
+                rationale="freeform request looked like a liquid-universe or trend scan",
             )
 
         candidate = self._best_symbol_candidate(raw)
@@ -197,7 +376,7 @@ class FortunaConversationalAdapter:
             )
 
         req = TelegramRequest(
-            TelegramRequestKind.ANALYZE,
+            TelegramRequestKind.RISK if words & _RISK_HINTS else TelegramRequestKind.ANALYZE,
             raw_text=raw,
             query=candidate,
             symbol=candidate,

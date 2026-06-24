@@ -1,128 +1,150 @@
-# Fortuna Architecture (Phase 1)
+# Fortuna Architecture
 
 ## Overview
 
-Fortuna Phase 1 is a **deterministic research pipeline**. Data flows through ingestion, indicator computation, signal compilation, backtest simulation, and composite scoring. LLM agents are interface-only stubs.
+Fortuna is now an **advisory-first multi-agent trading research and decision
+system** built on top of a deterministic market-signal core.
 
-```mermaid
-flowchart TB
-  subgraph data [Data]
-    DS[DataSource protocol]
-    YF[YFinanceSource]
-    OC[OpenChartSource]
-    PQ[Parquet Cache]
-    DB[DuckDB]
-    DS --> YF
-    DS --> OC
-    YF --> PQ
-    OC --> PQ
-    PQ --> DB
-  end
+It is no longer accurate to describe the repo as only a Phase 1 deterministic
+pipeline. The current architecture is:
 
-  subgraph tournament [Intraday tournament]
-  OHLCV[5m OHLCV window]
-  SEARCH[BatchEvaluator Tier 0-1]
-  WIN[Winner per bar]
-  SIG[BUY / SELL / HOLD]
-  OHLCV --> SEARCH --> WIN --> SIG
-  end
+1. deterministic strategies generate transparent signal context
+2. optional ML and RL layers add advisory evidence
+3. typed multi-agent workflow services compose discovery, analysis, briefing,
+   allocation, and training research
+4. nightly artifacts, promotion review, and model-health surfaces audit the
+   recurring loop
+5. Telegram and dashboard assistants sit above typed tools and do not own the
+   advisory core
 
-  data --> tournament
+For the most detailed current-state runtime map, see
+`docs/current_system_flow.md`.
 
-  subgraph fastPath [Fast path - tests]
-    DSL1[Strategy JSON]
-    IND_N[Numba indicators]
-    CMP1[StrategyCompiler]
-    NP[NumPyBacktestRunner]
-    DSL1 --> IND_N --> CMP1 --> NP
-  end
+## High-level system map
 
-  subgraph prodPath [Production path - CLI]
-    DSL2[Strategy JSON]
-    IND2[IndicatorEngine]
-    CMP2[StrategyCompiler]
-    VBT[vectorbt Portfolio]
-    MET[MetricsExtractor]
-    DSL2 --> IND2 --> CMP2 --> VBT --> MET
-  end
+```text
+market data / cache / live bars
+  -> deterministic strategy signals
+  -> optional ML signal-quality vote
+  -> optional RL policy vote
+  -> agentic orchestrator
+  -> final advisory decision
+  -> optional paper routing + learning rows
+  -> optional Telegram/dashboard assistant surfaces
 
-  subgraph eval [Evaluation]
-    SCR[StrategyScorer]
-    RNK[StrategyRanker]
-    SCR --> RNK
-  end
-
-  data --> IND2
-  NP --> SCR
-  MET --> SCR
+market universe discovery
+  -> Screener CSV seed or registry fallback
+  -> OHLCV enrichment for liquidity, trend, activity, and regime
+  -> shortlist analysis + briefing
+  -> portfolio allocation / critic
+  -> training candidates
+  -> training research plan
+  -> nightly workflow + promotion + acceptance artifacts
 ```
 
-## Module boundaries
+## Architectural boundaries
 
-| Module | Responsibility |
-|--------|----------------|
-| `fortuna.config` | YAML + env settings |
-| `fortuna.strategy` | Pydantic DSL, JSON load/save |
-| `fortuna.data` | Pluggable sources (yfinance, OpenChart), cache, DuckDB |
-| `fortuna.search` | Param grids, indicator cache, batch evaluation |
-| `fortuna.tournament` | Per-bar winner selection and signal logging |
-| `fortuna.arena` | Multi-strategy competition + per-strategy param search |
-| `fortuna.reporting` | TradingView-style Profit % / Win Ratio reports |
-| `fortuna.data.stream` | Rolling OHLCV windows from DuckDB/Parquet |
-| `fortuna.paper` | Walk-forward paper league + adaptive param learning |
-| `fortuna.quant` | Optional BS theoretical benchmark (not for signals) |
-| `fortuna.compute` | GPU/CPU scheduler, VRAM-aware indicator batching |
-| `fortuna.indicators` | Numba kernels + pandas for MACD/Bollinger |
-| `fortuna.backtesting` | Compile signals; vectorbt or NumPy runner |
-| `fortuna.evaluation` | Score, rank, persist strategies |
-| `fortuna.agents` | ABC interfaces + deterministic stubs |
-| `fortuna.ports` | Protocol interfaces for swapping implementations |
+### Deterministic core
 
-## Backtest runners
+The deterministic signal path remains the fallback and source of transparent
+trading context. If ML, RL, OpenAI routing, Telegram, or workflow helpers fail,
+Fortuna should still be able to produce the deterministic baseline output.
 
-| Runner | Use case | Dependencies |
-|--------|----------|--------------|
-| `NumPyBacktestRunner` | Fast unit tests, long-only percent SL/TP | NumPy only |
-| `BacktestEngine` | Production CLI, full vectorbt features | vectorbt (lazy import) |
+Key areas:
 
-## Strategy DSL
+- `src/fortuna/strategy/`
+- `src/fortuna/strategies/`
+- `src/fortuna/indicators/`
+- `src/fortuna/backtesting/`
+- `src/fortuna/reporting/`
 
-Strategies are declarative JSON files:
+### Advisory extensions
 
-- **Indicators** — named series attached to OHLCV
-- **Rules** — recursive conditions (`compare`, `crossover`, `and`, …)
-- **Risk** — percent stop loss, take profit, position sizing
+ML and RL layers are additive advisory evidence, not hard replacements for the
+deterministic core.
 
-The `StrategyCompiler` evaluates conditions bar-by-bar into boolean entry/exit series.
+Key areas:
 
-## Storage conventions
+- `src/fortuna/ml/`
+- `src/fortuna/rl/`
+- `src/fortuna/features/`
+- `src/fortuna/paper/`
 
-| Folder | Contents |
-|--------|----------|
-| `data/market_cache/{SYMBOL}/{timeframe}.parquet` | OHLCV cache |
-| `strategies/generated/` | Input strategies |
-| `strategies/validated/` | Passed scoring threshold |
-| `strategies/rejected/` | Failed scoring threshold |
+### Typed multi-agent workflow
 
-Each persisted strategy includes a `.score.json` sidecar with metrics.
+Fortuna’s current multi-agent behavior is expressed through typed services and
+contracts rather than through a free-form conversational runtime.
 
-## Testing
+Key areas:
 
-- Default: `pytest` runs fast tests (`-m 'not slow'`)
-- Slow integration: `pytest -m slow` loads vectorbt once
+- `src/fortuna/agentic/contracts.py`
+- `src/fortuna/agentic/tools.py`
+- `src/fortuna/app/multi_agent_team.py`
+- `src/fortuna/app/agent_roles/` — thin wrappers (`liquidity_scout`,
+  `activity_scout`, `universe_scout`, `instrument_analyst`, `briefing_agent`,
+  `portfolio_critic`, `research_planner`, `operations_monitor`)
+- `src/fortuna/app/market_universe.py`
+- `src/fortuna/app/shortlist_analysis.py`
+- `src/fortuna/app/shortlist_briefing.py`
+- `src/fortuna/app/portfolio_allocator.py`
+- `src/fortuna/app/training_candidates.py`
+- `src/fortuna/app/training_research.py`
+- `src/fortuna/app/operator_workflow.py`
 
-## Future phases (not implemented)
+### Runtime and operator surfaces
 
-- Walk-forward validation (`StubWalkForwardValidator`)
-- LLM research via Ollama / LangGraph
-- Regime detection agent
-- Paper trading and broker execution
+The dashboard and Telegram assistant are interfaces into the same typed
+advisory/runtime system. They should not become separate business-logic owners.
 
-## Hardware notes
+Key areas:
 
-On 8GB RAM systems:
+- `src/fortuna/app/session_engine.py`
+- `src/fortuna/app/streamlit_app.py`
+- `src/fortuna/telegram/`
+- `src/fortuna/agentic/conversational_adapter.py`
+- `src/fortuna/agentic/openai_router.py`
 
-- Backtest **one symbol** per run
-- Prefer daily timeframes for development
-- Use Parquet cache to avoid repeated downloads
-- Run `pytest` without `-m slow` during development
+### Audit, promotion, and acceptance
+
+Recurring artifacts are part of the product. Workflow snapshots, promotion
+reviews, nightly reports, acceptance bundles, and model-health summaries should
+remain linked and inspectable.
+
+Key areas:
+
+- `src/fortuna/app/model_status.py`
+- `src/fortuna/app/promotion_review.py`
+- `src/fortuna/app/acceptance_bundle.py`
+- `src/fortuna/app/acceptance_alignment.py` — shared refresh context and
+  `CrossArtifactAlignmentSummary` for acceptance bundles and promotion review
+- `src/fortuna/app/nightly_acceptance.py`
+- `src/fortuna/app/workflow_snapshot.py`
+- `src/fortuna/app/workflow_artifacts.py`
+- `scripts/nightly_train.py`
+- `scripts/build_acceptance_bundle.py`
+- `scripts/run_nightly_acceptance_dry_run.py`
+
+## Non-negotiable rules
+
+- advisory-first, no live broker execution by default
+- deterministic fallback must survive subsystem failure
+- no future leakage in ML/RL or derived labels
+- typed, auditable interfaces over opaque orchestration
+- no network calls in tests
+- runtime-impacting behavior behind `Settings` where appropriate
+
+## Guidance for contributors
+
+If you are changing Fortuna:
+
+1. read `AGENTS.md`
+2. read `docs/cursor_codebase_guide.md`
+3. inspect the exact runtime seam involved
+4. preserve deterministic fallback and advisory-only boundaries
+5. add focused tests for the touched surface
+
+For the current operating flow and contributor context, see:
+
+- `docs/how_to_use_fortuna.md`
+- `docs/operator_runbook.md`
+- `docs/current_system_flow.md`

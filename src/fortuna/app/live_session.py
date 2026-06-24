@@ -76,6 +76,16 @@ class LiveSessionBridge:
     def is_running(self) -> bool:
         return self._running
 
+    def live_stats(self) -> dict[str, object]:
+        """Tick counters for dashboard diagnostics."""
+        if self._feed is None:
+            return {"tick_count": 0, "last_tick_at": None, "last_error": None}
+        return {
+            "tick_count": self._feed.tick_count,
+            "last_tick_at": self._feed.last_tick_at,
+            "last_error": self._feed.last_error,
+        }
+
     def forming_bar_df(self) -> Optional[pd.DataFrame]:
         if self._feed is None:
             return None

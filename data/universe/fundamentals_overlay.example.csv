@@ -1,0 +1,4 @@
+symbol,sector,market_cap_bucket,operator_quality_score,operator_exclude,note
+RELIANCE.NS,Energy,large,0.85,false,core liquidity name
+TCS.NS,IT,large,0.75,false,
+INFY.NS,IT,large,0.60,false,watch for range days

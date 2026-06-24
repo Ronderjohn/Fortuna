@@ -6,7 +6,19 @@ from types import SimpleNamespace
 import pandas as pd
 
 from fortuna.agentic import AgenticLearningStore, LearningExample, LearningOutcome
-from fortuna.agentic.contracts import AdvisoryErrorCode
+from fortuna.agentic.contracts import (
+    AdvisoryErrorCode,
+    BriefingItem,
+    MarketUniverseCandidate,
+    MarketUniverseResponse,
+    MultiAgentWorkflowResponse,
+    ShortlistAnalysisItem,
+    ShortlistAnalysisResponse,
+    ShortlistBriefingResponse,
+    TrainingCandidate,
+    TrainingCandidateResponse,
+    TrainingResearchPlanResponse,
+)
 from fortuna.agentic.models import ActionRecommendation, AgentDecision, DecisionRationale
 from fortuna.agentic.tools import FortunaAdvisoryTools
 from fortuna.config.settings import Settings
@@ -85,6 +97,18 @@ class _FakeRegistry:
                 instrumenttype="FUTSTK",
                 name="RELIANCE",
             )
+        if sym == "NIFTY28MAY26C25000":
+            return InstrumentRef(
+                "NIFTY.OPT",
+                "NIFTY28MAY26C25000",
+                "7001",
+                "NFO",
+                instrumenttype="OPTIDX",
+                expiry=None,
+                name="NIFTY",
+                option_type="CE",
+                strike=25000.0,
+            )
         raise KeyError(symbol)
 
     def search_options(self, query, limit=4):
@@ -149,6 +173,42 @@ def test_search_instruments_equity_and_option_hits(tmp_path):
     option_response = tools.search_instruments("NIFTY CE")
     assert option_response.ok is True
     assert any("OPT" in hit.symbol for hit in option_response.hits)
+
+
+def test_search_instruments_normalizes_generic_option_alias(tmp_path):
+    class GenericOptionRegistry(_FakeRegistry):
+        def search_options(self, query, limit=4):
+            return [
+                SymbolSearchHit(
+                    display="NIFTY CE 25000 28-May-2026 — NIFTY28MAY26C25000 (NFO)",
+                    symbol="NIFTY.OPT",
+                    tradingsymbol="NIFTY28MAY26C25000",
+                    segment="OPTIONS",
+                )
+            ]
+
+        def resolve(self, symbol: str):
+            sym = symbol.upper()
+            if sym == "NIFTY28MAY26C25000":
+                from datetime import date
+
+                return InstrumentRef(
+                    "NIFTY.OPT",
+                    "NIFTY28MAY26C25000",
+                    "7001",
+                    "NFO",
+                    instrumenttype="OPTIDX",
+                    expiry=date(2026, 5, 28),
+                    name="NIFTY",
+                    option_type="CE",
+                    strike=25000.0,
+                )
+            return super().resolve(symbol)
+
+    tools = _tools(tmp_path, registry=GenericOptionRegistry())
+    response = tools.search_instruments("NIFTY")
+    assert response.ok is True
+    assert any(hit.symbol == "NIFTY.OPT.CE.25000.28MAY2026" for hit in response.hits)
 
 
 def test_analyze_instrument_delegates_to_builder(tmp_path):
@@ -217,3 +277,158 @@ def test_get_recent_learning_summary_filters_by_symbol(tmp_path):
     summary = tools.get_recent_learning_summary("RELIANCE.NS")
     assert summary.total_rows == 1
     assert summary.recent_rows[0].symbol == "RELIANCE.NS"
+
+
+def test_get_market_universe_returns_typed_response(tmp_path, monkeypatch):
+    expected = MarketUniverseResponse(
+        ok=True,
+        source="registry",
+        timeframe="1d",
+        lookback_days=30,
+        candidates=(
+            MarketUniverseCandidate(
+                symbol="RELIANCE.NS",
+                display_name="RELIANCE",
+                source="registry",
+                avg_turnover=1_000_000.0,
+                avg_volume=10000.0,
+                trend_pct=2.4,
+                last_close=1500.0,
+                liquidity_score=12.3,
+            ),
+        ),
+    )
+
+    def _fake_builder(**kwargs):
+        assert kwargs["timeframe"] == "1d"
+        return expected
+
+    monkeypatch.setattr("fortuna.agentic.tools.build_market_universe", _fake_builder)
+    tools = _tools(tmp_path)
+    response = tools.get_market_universe()
+    assert response.ok is True
+    assert response.candidates[0].symbol == "RELIANCE.NS"
+
+
+def test_analyze_market_shortlist_returns_typed_response(tmp_path, monkeypatch):
+    expected = ShortlistAnalysisResponse(
+        ok=True,
+        source="registry",
+        timeframe="5m",
+        lookback_days=30,
+        items=(
+            ShortlistAnalysisItem(
+                symbol="RELIANCE.NS",
+                liquidity_score=12.3,
+                source="registry",
+            ),
+        ),
+    )
+
+    def _fake_shortlist(**kwargs):
+        assert kwargs["analysis_limit"] == 5
+        return expected
+
+    monkeypatch.setattr("fortuna.agentic.tools.analyze_market_shortlist", _fake_shortlist)
+    tools = _tools(tmp_path)
+    response = tools.analyze_market_shortlist()
+    assert response.ok is True
+    assert response.items[0].symbol == "RELIANCE.NS"
+
+
+def test_get_training_candidates_returns_typed_response(tmp_path, monkeypatch):
+    expected = TrainingCandidateResponse(
+        ok=True,
+        source="registry",
+        timeframe="5m",
+        lookback_days=30,
+        candidates=(
+            TrainingCandidate(
+                symbol="RELIANCE.NS",
+                shortlist_rank=1,
+                ml_candidate=True,
+                rl_candidate=True,
+            ),
+        ),
+    )
+
+    def _fake_candidates(**kwargs):
+        assert kwargs["analysis_limit"] == 8
+        return expected
+
+    monkeypatch.setattr("fortuna.agentic.tools.build_training_candidates", _fake_candidates)
+    tools = _tools(tmp_path)
+    response = tools.get_training_candidates()
+    assert response.ok is True
+    assert response.candidates[0].symbol == "RELIANCE.NS"
+
+
+def test_get_training_research_plan_returns_typed_response(tmp_path, monkeypatch):
+    expected = TrainingResearchPlanResponse(
+        ok=True,
+        source="screener",
+        timeframe="5m",
+        lookback_days=30,
+        ml_symbols=("RELIANCE.NS",),
+        rl_symbols=("RELIANCE.NS",),
+    )
+
+    def _fake_plan(**kwargs):
+        assert kwargs["selection_policy"] == "diversified"
+        return expected
+
+    monkeypatch.setattr("fortuna.agentic.tools.build_training_research_plan", _fake_plan)
+    tools = _tools(tmp_path)
+    response = tools.get_training_research_plan()
+    assert response.ok is True
+    assert response.ml_symbols == ("RELIANCE.NS",)
+
+
+def test_get_multi_agent_workflow_returns_typed_response(tmp_path, monkeypatch):
+    expected = MultiAgentWorkflowResponse(
+        ok=True,
+        source="auto",
+        timeframe="5m",
+        lookback_days=30,
+        headline="multi-agent ready",
+    )
+
+    def _fake_workflow(**kwargs):
+        assert kwargs["timeframe"] == "5m"
+        assert kwargs["analysis_limit"] == 8
+        return expected
+
+    monkeypatch.setattr("fortuna.agentic.tools.build_multi_agent_workflow", _fake_workflow)
+    tools = _tools(tmp_path)
+    response = tools.get_multi_agent_workflow()
+    assert response.ok is True
+    assert response.headline == "multi-agent ready"
+
+
+def test_get_shortlist_briefing_returns_typed_response(tmp_path, monkeypatch):
+    expected = ShortlistBriefingResponse(
+        ok=True,
+        source="registry",
+        timeframe="5m",
+        lookback_days=30,
+        headline="1 candidate setups, 1 reviewed",
+        items=(
+            BriefingItem(
+                symbol="RELIANCE.NS",
+                action="BUY",
+                confidence=0.8,
+                verdict="candidate",
+                summary="BUY candidate with relatively clean support",
+            ),
+        ),
+    )
+
+    def _fake_briefing(**kwargs):
+        assert kwargs["analysis_limit"] == 5
+        return expected
+
+    monkeypatch.setattr("fortuna.agentic.tools.build_shortlist_briefing", _fake_briefing)
+    tools = _tools(tmp_path)
+    response = tools.get_shortlist_briefing()
+    assert response.ok is True
+    assert response.items[0].symbol == "RELIANCE.NS"

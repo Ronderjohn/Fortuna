@@ -9,9 +9,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fortuna.app.workflow_snapshot import (
+    format_workflow_snapshot_summary,
+    load_workflow_snapshot_summary,
+)
 from fortuna.models import PromotionRecord, PromotionStatus
 from fortuna.models.promotion import promote as registry_promote
 from fortuna.rl.training.checkpoint import PolicyCheckpoint
+
+
+def _resolve_workflow_snapshot(path_text: str) -> str | None:
+    text = str(path_text or "").strip()
+    if not text:
+        return None
+    path = Path(text)
+    if not path.is_file():
+        raise SystemExit(f"workflow snapshot not found: {path}")
+    return str(path.resolve())
 
 
 def _locate_checkpoint(
@@ -39,6 +53,7 @@ def promote(
     *,
     allow_rejected: bool = False,
     symbol: str | None = None,
+    workflow_snapshot_path: str | None = None,
 ) -> Path:
     source_dir = _locate_checkpoint(run_id, models_root, allow_rejected)
     cp = PolicyCheckpoint.read(source_dir / "metadata.json")
@@ -51,6 +66,7 @@ def promote(
         source_dir,
         status=PromotionStatus.VALIDATED,
     )
+    record.workflow_snapshot_path = workflow_snapshot_path
     return registry_promote(record, models_root=models_root, promoted_by="manual")
 
 
@@ -64,14 +80,24 @@ def main() -> int:
         action="store_true",
         help="Also accept run_ids under models/rejected/",
     )
+    parser.add_argument(
+        "--workflow-snapshot",
+        default="",
+        help="Optional workflow snapshot JSON to reference from the promotion audit/pointer",
+    )
     args = parser.parse_args()
+    workflow_snapshot_path = _resolve_workflow_snapshot(args.workflow_snapshot)
     out = promote(
         args.run_id,
         Path(args.models_root),
         allow_rejected=args.allow_rejected,
         symbol=args.symbol or None,
+        workflow_snapshot_path=workflow_snapshot_path,
     )
     print(f"promoted run_id={args.run_id} -> {out}")
+    summary = load_workflow_snapshot_summary(workflow_snapshot_path)
+    if summary is not None:
+        print(format_workflow_snapshot_summary(summary))
     return 0
 
 

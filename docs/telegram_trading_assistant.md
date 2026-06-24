@@ -9,6 +9,9 @@ The Telegram assistant can:
 
 - search NSE equities and indexed NFO futures
 - resolve explicit NFO option contracts
+- rank a liquid market universe for watchlist or training prep
+- turn shortlisted setups into a simple constrained portfolio allocation
+- show model/runtime health
 - run Fortuna's current analysis flow for the requested instrument
 - reply with the final advisory decision, confidence, key reasons, and current action plan
 
@@ -37,13 +40,13 @@ runtime rather than inventing a parallel analysis stack.
 - `scripts/run_telegram_bot.py`
   - operator entrypoint for the polling bot
 - `src/fortuna/telegram/parser.py`
-  - turns `/search ...`, `/analyze ...`, and tag-style prompts into structured requests
+  - turns `/search ...`, `/analyze ...`, `/universe ...`, `/brief ...`, `/allocate ...`, `/candidates ...`, `/workflow ...`, `/health`, and tag-style prompts into structured requests
 - `src/fortuna/telegram/router.py`
   - maps parsed requests to tool execution, help, clarification, or unsupported replies
 - `src/fortuna/telegram/assistant.py`
   - orchestrates parse → route → tools → format via `execute_route()`
 - `src/fortuna/agentic/tools.py`
-  - typed tool surface (`search_instruments`, `analyze_instrument`, `get_model_health`, `get_recent_learning_summary`)
+  - typed tool surface (`search_instruments`, `analyze_instrument`, `get_market_universe`, `get_shortlist_briefing`, `get_portfolio_allocation`, `get_training_candidates`, `get_model_health`, `get_recent_learning_summary`) plus a composed workflow summary over the same stages
 - `src/fortuna/telegram/formatters.py`
   - formats typed search and analysis responses into Telegram text
 - `src/fortuna/app/advisory_service.py`
@@ -99,6 +102,14 @@ FORTUNA_CONVERSATIONAL_ADAPTER_ENABLED=true
 FORTUNA_CONVERSATIONAL_ADAPTER_MODE=heuristic
 ```
 
+Optional OpenAI planner mode:
+
+```env
+FORTUNA_CONVERSATIONAL_ADAPTER_MODE=openai
+FORTUNA_OPENAI_API_KEY=...
+FORTUNA_OPENAI_MODEL=gpt-5.4-mini
+```
+
 ## 2. Validate before running
 
 Run:
@@ -128,6 +139,10 @@ logs/telegram_bot/state.json
 If the conversational adapter is enabled, the bot also accepts selected
 free-form prompts and normalizes them into typed advisory tool calls.
 
+If `FORTUNA_CONVERSATIONAL_ADAPTER_MODE=openai`, that planning step is handled
+by an OpenAI Responses API tool-calling layer above the same typed Fortuna
+tools. It remains advisory-only and does not bypass the main decision core.
+
 ## 4. Supported commands and tags
 
 The bot understands either slash commands or tag-style prompts.
@@ -144,6 +159,12 @@ The bot understands either slash commands or tag-style prompts.
 ```text
 /search RELIANCE
 #search NIFTY
+/universe 1d 30d limit=10
+/brief 5m 20d limit=5
+/allocate 5m 20d limit=5 maxpos=3 perexp=1 sameside=2
+/candidates ml 5m 20d limit=8
+/workflow 5m 20d limit=8
+/health
 ```
 
 This returns matching symbols such as:
@@ -166,6 +187,9 @@ This returns matching symbols such as:
 How is Reliance looking on 15m for 20d?
 Should I enter NIFTY CE 25000 28MAY2026?
 Find Reliance
+Show liquid high-volume stocks
+How would you allocate the top liquid stock setups into a small portfolio?
+Show model health
 ```
 
 ### Analyze future
@@ -213,6 +237,13 @@ Telegram analysis replies include:
 - current action plan
 - winning deterministic strategy when available
 
+Allocation replies include:
+
+- selected setups
+- skipped setups with reasons
+- simple allocation weights
+- exposure keys and limit notes
+
 Important:
 
 - The reply is **advisory only**.
@@ -232,6 +263,8 @@ Good operator flow:
 3. Re-check on the next bar close before acting.
 4. For options, keep the request explicit:
    - `/analyze NIFTY CE 25000 28MAY2026`
+5. If several setups look good, ask for a constrained basket:
+   - `/allocate 5m 20d limit=5 maxpos=3 perexp=1 sameside=2`
 
 For a smoother conversation style, think of the bot as a short loop:
 
@@ -253,7 +286,8 @@ For a smoother conversation style, think of the bot as a short loop:
 - Futures are supported through the existing instrument registry.
 - Options work best when the contract is explicit.
 - Generic option-chain exploration is still lighter than the equity/futures search path.
-- The conversational adapter is heuristic and safety-first; explicit commands remain the most reliable path.
+- The heuristic conversational adapter is safety-first; explicit commands remain the most reliable path.
+- The OpenAI planner is optional and should be treated as a router above typed tools, not as a trading-decision engine.
 
 ## 8. Common mistakes and troubleshooting
 

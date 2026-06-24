@@ -27,15 +27,34 @@ apply_low_spec_gpu_defaults()
 
 # Warm pre-existing circular: importing calendar first breaks the
 # data.manager -> backtesting.standard -> paper -> data.manager cycle.
+from fortuna.app.training_candidates import (  # noqa: E402
+    load_training_candidates_manifest,
+    select_training_symbols,
+)
 from fortuna.backtesting.standard.calendar import filter_session_bars  # noqa: E402,F401
-
 from fortuna.rl.env.reward import RewardConfig  # noqa: E402
 from fortuna.rl.training.trainer import FortunaRLTrainer, TrainerConfig  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Train a Fortuna RL policy")
-    parser.add_argument("--symbol", default="ICICIBANK.NS")
+    parser.add_argument("--symbol", default="")
+    parser.add_argument(
+        "--candidate-manifest",
+        default="",
+        help="Optional shortlist-driven training candidate manifest JSON",
+    )
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=1,
+        help="How many RL candidate symbols to train from the manifest",
+    )
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Train all selected RL candidate symbols sequentially",
+    )
     parser.add_argument("--timeframe", default="5m")
     parser.add_argument("--days", type=int, default=180)
     parser.add_argument("--train-bars", type=int, default=156)
@@ -87,9 +106,34 @@ def main() -> int:
         help="Override RewardConfig.holding_penalty",
     )
     args = parser.parse_args()
+    symbols = _resolve_rl_symbols(args)
+    if not symbols:
+        raise SystemExit("Provide --symbol or --candidate-manifest")
+
+    status = 0
+    for symbol in symbols:
+        try:
+            _train_one(args, symbol)
+        except Exception as exc:  # noqa: BLE001
+            status = 1
+            print(f"[RL] {symbol} failed: {exc}")
+    return status
+
+
+def _resolve_rl_symbols(args) -> list[str]:
+    if str(args.symbol or "").strip():
+        return [str(args.symbol).strip()]
+    if str(args.candidate_manifest or "").strip():
+        manifest = load_training_candidates_manifest(Path(args.candidate_manifest))
+        top_n = None if args.batch else args.top_n
+        return select_training_symbols(manifest, target="rl", top_n=top_n)
+    return []
+
+
+def _train_one(args, symbol: str) -> None:
 
     cfg_kwargs: dict[str, object] = {
-        "symbol": args.symbol,
+        "symbol": symbol,
         "timeframe": args.timeframe,
         "days": args.days,
         "train_bars": args.train_bars,
@@ -132,11 +176,12 @@ def main() -> int:
 
     dest = "validated" if meta.verdict_passed else "rejected"
     print(f"\n[RL] Checkpoint saved -> models/{dest}/{meta.run_id}")
+    print(f"     Symbol:     {symbol}")
     print(f"     OOS Sharpe: {meta.oos_metrics.sharpe_ratio:.3f}")
     print(f"     PF:         {meta.oos_metrics.profit_factor:.3f}")
     print(f"     Trades:     {meta.oos_metrics.total_trades}")
     print(f"     Passed:     {meta.verdict_passed}")
-    return 0 if meta.verdict_passed else 0  # always return 0 — verdict is data, not error
+    return None
 
 
 if __name__ == "__main__":

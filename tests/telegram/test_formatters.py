@@ -12,8 +12,15 @@ from fortuna.telegram.router import ClarificationCode
 def test_format_help_lists_core_commands():
     text = format_help()
     assert "/search RELIANCE" in text
+    assert "/risk RELIANCE FUT" in text
     assert "/analyze NIFTY CE 25000 28MAY2026" in text
     assert "Timeframe and lookback" in text
+    assert "/workflow" not in text
+
+
+def test_format_help_advanced_lists_expert_commands():
+    text = format_help(advanced=True)
+    assert "/workflow" in text
 
 
 def test_format_clarification_incomplete_option():
@@ -47,3 +54,23 @@ def test_format_analysis_error_resolve_failed_suggests_search():
     text = format_analysis_error(response)
     assert "/search" in text
     assert "UNKNOWNXYZ" in text
+
+
+def test_format_analysis_error_invalid_request_passthrough():
+    from fortuna.agentic.contracts import (
+        AdvisoryError,
+        AdvisoryErrorCode,
+        InstrumentAnalysisRequest,
+        InstrumentAnalysisResponse,
+    )
+
+    response = InstrumentAnalysisResponse(
+        ok=False,
+        request=InstrumentAnalysisRequest(symbol="NIFTY CE 25000 28MAY2026"),
+        error=AdvisoryError(
+            code=AdvisoryErrorCode.INVALID_REQUEST,
+            message="Option contract NIFTY CE 25000 28MAY2026 expired on 28-May-2026.",
+        ),
+    )
+    text = format_analysis_error(response)
+    assert "expired on 28-May-2026" in text

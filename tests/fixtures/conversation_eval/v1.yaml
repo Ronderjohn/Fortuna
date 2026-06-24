@@ -126,9 +126,9 @@ cases:
     input: "/analyze RELIANCE"
     expect:
       text_contains:
-        - "Fortuna analysis: RELIANCE.NS"
-        - "Decision: BUY"
-        - "Advisory only"
+        - "RELIANCE.NS"
+        - "Verdict: BUY"
+        - "Confidence:"
 
   - id: assistant_unknown
     layer: assistant
@@ -218,5 +218,5 @@ cases:
     input: "/help"
     expect:
       text_contains:
-        - "Fortuna Telegram assistant"
+        - "Fortuna signal assistant"
         - "/search RELIANCE"

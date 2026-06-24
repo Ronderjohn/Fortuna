@@ -14,6 +14,7 @@ class _FakeClient:
     def __init__(self, *, fail_send: bool = False):
         self.sent = []
         self.fail_send = fail_send
+        self.file_bytes = b"fake-image-bytes"
         self.updates = [
             {
                 "update_id": 10,
@@ -35,12 +36,25 @@ class _FakeClient:
         self.sent.append((chat_id, text))
         return {"ok": True}
 
+    def get_file(self, file_id):
+        return {"file_path": f"photos/{file_id}.jpg"}
+
+    def download_file(self, file_path):
+        return self.file_bytes
+
 
 class _FakeAssistant:
-    def handle_interaction(self, text: str) -> InteractionResult:
+    def handle_interaction(self, text: str, **kwargs) -> InteractionResult:
         req = parse_telegram_request(text)
         route = route_telegram_request(req)
-        return InteractionResult(reply=f"handled::{text}", request=req, route=route)
+        attachment = kwargs.get("attachment")
+        return InteractionResult(
+            reply=f"handled::{text}",
+            request=req,
+            route=route,
+            modality="image" if attachment is not None else "text",
+            attachment_kind=(attachment.kind if attachment is not None else None),
+        )
 
 
 def _settings(tmp_path: Path, *, audit_enabled: bool = True) -> Settings:
@@ -52,6 +66,8 @@ def _settings(tmp_path: Path, *, audit_enabled: bool = True) -> Settings:
         telegram_enabled=True,
         telegram_bot_token="x",
         telegram_chat_id="12345",
+        telegram_allowed_chat_ids="",
+        telegram_admin_chat_ids="",
         telegram_request_audit_enabled=audit_enabled,
     )
 
@@ -211,6 +227,8 @@ def test_runtime_accepts_any_chat_when_chat_id_unconfigured(tmp_path: Path):
         telegram_enabled=True,
         telegram_bot_token="x",
         telegram_chat_id="",
+        telegram_allowed_chat_ids="",
+        telegram_admin_chat_ids="",
         telegram_request_audit_enabled=False,
     )
     client = _FakeClient()
@@ -227,3 +245,117 @@ def test_runtime_accepts_any_chat_when_chat_id_unconfigured(tmp_path: Path):
     )
 
     assert client.sent == [("99999", "handled::/help")]
+
+
+def test_runtime_accepts_multiple_allowed_chats(tmp_path: Path):
+    settings = Settings(
+        env="test",
+        project_root=tmp_path,
+        data_cache_dir=tmp_path / "cache",
+        duckdb_path=tmp_path / "cache" / "fortuna.duckdb",
+        telegram_enabled=True,
+        telegram_bot_token="x",
+        telegram_chat_id="",
+        telegram_allowed_chat_ids="12345,22222",
+        telegram_admin_chat_ids="",
+        telegram_request_audit_enabled=False,
+    )
+    client = _FakeClient()
+    runtime = TelegramBotRuntime(settings, client=client, assistant=_FakeAssistant())
+
+    runtime._handle_update(
+        {
+            "update_id": 30,
+            "message": {"text": "/help", "chat": {"id": "22222"}},
+        }
+    )
+    runtime._handle_update(
+        {
+            "update_id": 31,
+            "message": {"text": "/help", "chat": {"id": "99999"}},
+        }
+    )
+
+    assert client.sent == [("22222", "handled::/help")]
+
+
+def test_runtime_persists_per_user_state_without_leakage(tmp_path: Path):
+    settings = Settings(
+        env="test",
+        project_root=tmp_path,
+        data_cache_dir=tmp_path / "cache",
+        duckdb_path=tmp_path / "cache" / "fortuna.duckdb",
+        telegram_enabled=True,
+        telegram_bot_token="x",
+        telegram_chat_id="",
+        telegram_allowed_chat_ids="",
+        telegram_admin_chat_ids="",
+        telegram_request_audit_enabled=False,
+    )
+    client = _FakeClient()
+    runtime = TelegramBotRuntime(settings, client=client, assistant=_FakeAssistant())
+
+    runtime._handle_update(
+        {
+            "update_id": 40,
+            "message": {"text": "/analyze RELIANCE 15m 20d", "chat": {"id": "11111"}},
+        }
+    )
+    runtime._handle_update(
+        {
+            "update_id": 41,
+            "message": {"text": "/analyze SBIN 5m 10d", "chat": {"id": "22222"}},
+        }
+    )
+
+    state_a = runtime.session_store.get_state("11111")
+    state_b = runtime.session_store.get_state("22222")
+    assert state_a.last_symbol == "RELIANCE"
+    assert state_a.last_timeframe == "15m"
+    assert state_a.last_days == 20
+    assert state_b.last_symbol == "SBIN"
+    assert state_b.last_timeframe == "5m"
+    assert state_b.last_days == 10
+
+
+def test_runtime_handles_photo_update_and_cleans_temp_file(tmp_path: Path):
+    settings = Settings(
+        env="test",
+        project_root=tmp_path,
+        data_cache_dir=tmp_path / "cache",
+        duckdb_path=tmp_path / "cache" / "fortuna.duckdb",
+        telegram_enabled=True,
+        telegram_bot_token="x",
+        telegram_chat_id="12345",
+        telegram_allowed_chat_ids="",
+        telegram_admin_chat_ids="",
+        telegram_request_audit_enabled=True,
+        signal_image_input_enabled=True,
+        signal_image_temp_dir=tmp_path / "tmp" / "telegram_images",
+    )
+    audit_store = TelegramRequestAuditStore(tmp_path / "logs" / "telegram" / "requests.jsonl")
+    client = _FakeClient()
+    runtime = TelegramBotRuntime(
+        settings,
+        client=client,
+        assistant=_FakeAssistant(),
+        audit_store=audit_store,
+    )
+
+    runtime._handle_update(
+        {
+            "update_id": 50,
+            "message": {
+                "caption": "What do you think?",
+                "photo": [{"file_id": "abc123", "file_size": 24}],
+                "chat": {"id": "12345"},
+            },
+        }
+    )
+
+    assert client.sent == [("12345", "handled::What do you think?")]
+    rows = audit_store.read_recent(limit=1)
+    assert rows[0]["modality"] == "image"
+    assert rows[0]["attachment_kind"] == "image"
+    temp_dir = settings.resolve_path(settings.signal_image_temp_dir)
+    assert not list(temp_dir.glob("*"))

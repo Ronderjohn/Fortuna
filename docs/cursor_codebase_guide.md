@@ -471,11 +471,12 @@ When Cursor is asked to change Fortuna:
 
 1. read `AGENTS.md`
 2. read this file
-3. inspect the exact runtime seam involved
-4. identify which layer owns the behavior
-5. keep deterministic fallback intact
-6. add or update focused tests
-7. avoid broad refactors unless the current seam is truly broken
+3. read the current operator/product docs if the change is user-facing
+4. inspect the exact runtime seam involved
+5. identify which layer owns the behavior
+6. keep deterministic fallback intact
+7. add or update focused tests
+8. avoid broad refactors unless the current seam is truly broken
 
 ## 15. Short version
 
